@@ -1,85 +1,76 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/status.dart' as status;
+
+/// WebSocket URL from --dart-define at build time.
+/// flutter run --dart-define=WS_URL=wss://xxxx.execute-api.us-east-1.amazonaws.com/prod
+class WebSocketConfig {
+  static const url = String.fromEnvironment(
+    'WS_URL',
+    defaultValue: 'wss://REPLACE_ME.execute-api.us-east-1.amazonaws.com/prod',
+  );
+}
 
 class WebSocketService {
-  // ── Replace with your real WebSocket URL when ready ──
-  static const String wsUrl =
-      'wss://zotz37x8f2.execute-api.us-east-1.amazonaws.com/production';
+  static final WebSocketService _instance = WebSocketService._internal();
+  factory WebSocketService() => _instance;
+  WebSocketService._internal();
 
   WebSocketChannel? _channel;
-  StreamSubscription? _subscription;
-  bool _disposed = false;
-  bool _enabled  = true; // URL is set — enabled by default
+  bool _isConnected = false;
 
-  final StreamController<Map<String, dynamic>> _controller =
-      StreamController.broadcast();
+  final List<Function(Map<String, dynamic>)> _listeners = [];
 
-  Stream<Map<String, dynamic>> get stream => _controller.stream;
-  bool get isConnected => _channel != null;
+  bool get isConnected => _isConnected;
 
-  void connect() {
-    // Skip connection if disabled
-    if (!_enabled) return;
-    if (_disposed) return;
+  void connect({String? tenantId}) {
+    if (_isConnected) return;
+
+    final uri = Uri.parse(WebSocketConfig.url).replace(
+      queryParameters: tenantId != null ? {'tenant_id': tenantId} : null,
+    );
 
     try {
-      _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
-      _subscription = _channel!.stream.listen(
+      _channel = WebSocketChannel.connect(uri);
+      _isConnected = true;
+
+      _channel!.stream.listen(
         (data) {
-          if (_disposed) return;
           try {
-            final decoded = jsonDecode(data as String);
-            if (decoded is Map<String, dynamic>) {
-              _controller.add(decoded);
+            final payload = jsonDecode(data as String) as Map<String, dynamic>;
+            for (final listener in _listeners) {
+              listener(payload);
             }
-          } catch (_) {}
-        },
-        onError: (e) {
-          debugPrint('WebSocket error: $e');
-          _reconnect();
+          } catch (e) {
+            print('[WebSocket] parse error: $e');
+          }
         },
         onDone: () {
-          debugPrint('WebSocket closed — reconnecting');
-          _reconnect();
+          _isConnected = false;
+          print('[WebSocket] disconnected');
         },
-        cancelOnError: false,
+        onError: (e) {
+          _isConnected = false;
+          print('[WebSocket] error: $e');
+        },
       );
-      debugPrint('WebSocket connected!');
     } catch (e) {
-      debugPrint('WebSocket connect failed: $e');
-      _reconnect();
+      _isConnected = false;
+      print('[WebSocket] connect failed: $e');
     }
   }
 
-  void _reconnect() {
-    if (_disposed || !_enabled) return;
-    _subscription?.cancel();
-    _channel = null;
-    Future.delayed(const Duration(seconds: 3), connect);
+  void addListener(Function(Map<String, dynamic>) listener) {
+    _listeners.add(listener);
   }
 
-  /// Call this once you have a real WebSocket URL to enable live updates.
-  void enable() {
-    _enabled = true;
-    connect();
+  void removeListener(Function(Map<String, dynamic>) listener) {
+    _listeners.remove(listener);
   }
 
   void disconnect() {
-    _subscription?.cancel();
-    _channel?.sink.close();
-    _channel = null;
-  }
-
-  void dispose() {
-    _disposed = true;
-    disconnect();
-    _controller.close();
+    _channel?.sink.close(status.goingAway);
+    _isConnected = false;
+    _listeners.clear();
   }
 }
-
-// Global singleton instance
-final wsService = WebSocketService();
-
-// ignore: avoid_print
-void debugPrint(String msg) => print(msg);

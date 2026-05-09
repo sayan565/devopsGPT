@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  DevOpsGPT Monitoring Role — Deploy this in YOUR AWS account.
+  It creates an IAM role that allows DevOpsGPT to monitor your infrastructure
+  using secure cross-account AssumeRole. No access keys are ever stored.
+
+Parameters:
+  DevOpsGPTMasterAccountId:
+    Type: String
+    Description: "DevOpsGPT master AWS account ID (provided by DevOpsGPT during onboarding)"
+    AllowedPattern: "[0-9]{12}"
+
+  TenantId:
+    Type: String
+    Description: "Your DevOpsGPT tenant ID (provided during signup)"
+
+  AllowAutoHealing:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: "Allow DevOpsGPT to run SSM healing commands on your EC2 instances"
+
+Conditions:
+  EnableAutoHealing: !Equals [!Ref AllowAutoHealing, "true"]
+
+Resources:
+  DevOpsGPTMonitoringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DevOpsGPTMonitoringRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${DevOpsGPTMasterAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref TenantId  # Prevents confused deputy attacks
+
+      Policies:
+        - PolicyName: DevOpsGPTReadPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: EC2ReadOnly
+                Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                  - ec2:DescribeTags
+                  - ec2:DescribeRegions
+                Resource: "*"
+
+              - Sid: CloudWatchReadOnly
+                Effect: Allow
+                Action:
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:ListMetrics
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                  - logs:GetLogEvents
+                  - logs:FilterLogEvents
+                Resource: "*"
+
+              - !If
+                - EnableAutoHealing
+                - Sid: SSMHealingCommands
+                  Effect: Allow
+                  Action:
+                    - ssm:SendCommand
+                    - ssm:GetCommandInvocation
+                    - ssm:ListCommands
+                    - ssm:DescribeInstanceInformation
+                  Resource: "*"
+                - !Ref AWS::NoValue
+
+Outputs:
+  RoleArn:
+    Description: "Copy this ARN and paste it into DevOpsGPT tenant onboarding"
+    Value: !GetAtt DevOpsGPTMonitoringRole.Arn
+
+  RoleName:
+    Value: !Ref DevOpsGPTMonitoringRole

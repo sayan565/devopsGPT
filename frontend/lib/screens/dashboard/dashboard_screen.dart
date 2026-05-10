@@ -138,7 +138,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: cardColor,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.critical.withValues(alpha: 0.4)),
           ),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -164,7 +164,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 backgroundColor: AppColors.accent,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4)),
+                    borderRadius: BorderRadius.circular(8)),
               ),
             ),
           ]),
@@ -207,7 +207,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           horizontal: 8, vertical: 6),
                       decoration: BoxDecoration(
                         color: AppColors.success.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                             color: AppColors.success.withValues(alpha: 0.4)),
                       ),
@@ -232,7 +232,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: cardColor,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: borderColor),
                     ),
                     child: Row(children: [
@@ -258,7 +258,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       foregroundColor: AppColors.accent,
                       side: BorderSide(color: AppColors.accent.withValues(alpha: 0.5)),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4)),
+                          borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       textStyle: const TextStyle(fontSize: 12),
@@ -277,7 +277,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ? [AppColors.critical, AppColors.warning]
                       : [AppColors.success, AppColors.accent],
                 ),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Row(children: [
                 Icon(
@@ -356,14 +356,21 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Container(
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: borderColor)),
             ),
@@ -394,8 +401,16 @@ class _DashboardScreenState extends State<DashboardScreen>
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: cardColor,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: color.withValues(alpha: isDark ? 0.35 : 0.4)),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: color.withValues(alpha: isDark ? 0.3 : 0.35)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -404,10 +419,10 @@ class _DashboardScreenState extends State<DashboardScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: isDark ? 0.2 : 0.1),
-                    borderRadius: BorderRadius.circular(4),
+                    color: color.withValues(alpha: isDark ? 0.18 : 0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(icon, color: color, size: 14),
                 ),
@@ -419,7 +434,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     )),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(label,
                 style: TextStyle(
                   color: isDark
@@ -446,7 +461,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: AppColors.warningGlow,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: const Icon(Icons.warning_rounded,
               color: AppColors.warning, size: 14),
@@ -473,7 +488,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             color: AppColors.warning.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
           ),
           child: Text(

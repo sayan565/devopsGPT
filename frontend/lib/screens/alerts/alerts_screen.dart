@@ -11,10 +11,10 @@ class AlertsScreen extends StatefulWidget {
 }
 
 class _AlertsScreenState extends State<AlertsScreen> {
-  List<dynamic> alerts = [];
-  bool loading = true;
-  String error = '';
-  String _filterSeverity = 'All';
+  List<dynamic> alerts      = [];
+  bool loading              = true;
+  String error              = '';
+  String _filterSeverity    = 'All';
 
   @override
   void initState() {
@@ -38,6 +38,14 @@ class _AlertsScreenState extends State<AlertsScreen> {
           (a['severity'] ?? '').toString().toUpperCase() ==
           _filterSeverity.toUpperCase()).toList();
 
+  Color _severityColor(String s) {
+    switch (s.toUpperCase()) {
+      case 'HIGH':   return AppColors.critical;
+      case 'MEDIUM': return AppColors.warning;
+      default:       return AppColors.info;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bgColor     = AppTheme.bg(context);
@@ -53,7 +61,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
 
-          // ── Page header ───────────────────────
+          // ── Page header ──────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Row(
@@ -63,7 +71,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
                   Text('Alerts',
                       style: GoogleFonts.inter(
                         color: textPrimary,
-                        fontSize: 20,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
                       )),
                   Text('${alerts.length} active alerts',
@@ -78,7 +86,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
                     side: BorderSide(
                         color: AppColors.accent.withValues(alpha: 0.5)),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4)),
+                        borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 6),
                     textStyle: const TextStyle(fontSize: 12),
@@ -90,17 +98,17 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
           const SizedBox(height: 12),
 
-          // ── Severity filter ───────────────────
+          // ── Severity filter chips ────────────────────
           Container(
             color: cardColor,
             padding: const EdgeInsets.symmetric(
-                horizontal: 16, vertical: 8),
+                horizontal: 16, vertical: 10),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: ['All', 'HIGH', 'MEDIUM', 'LOW'].map((f) {
                   final isSelected = _filterSeverity == f;
-                  Color fColor = f == 'HIGH'
+                  final fColor = f == 'HIGH'
                       ? AppColors.critical
                       : f == 'MEDIUM'
                           ? AppColors.warning
@@ -108,21 +116,22 @@ class _AlertsScreenState extends State<AlertsScreen> {
                               ? AppColors.info
                               : AppColors.accent;
                   return GestureDetector(
-                    onTap: () =>
-                        setState(() => _filterSeverity = f),
-                    child: Container(
+                    onTap: () => setState(() => _filterSeverity = f),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 5),
+                          horizontal: 14, vertical: 6),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? fColor.withValues(alpha: 0.12)
+                            ? fColor.withValues(alpha: 0.15)
                             : Colors.transparent,
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: isSelected
-                              ? fColor.withValues(alpha: 0.6)
+                              ? fColor.withValues(alpha: 0.7)
                               : borderColor,
+                          width: isSelected ? 1.5 : 1,
                         ),
                       ),
                       child: Text(
@@ -131,7 +140,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
                           color: isSelected ? fColor : textMuted,
                           fontSize: 11,
                           fontWeight: isSelected
-                              ? FontWeight.w600
+                              ? FontWeight.w700
                               : FontWeight.normal,
                         ),
                       ),
@@ -144,38 +153,44 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
           Divider(height: 1, color: borderColor),
 
-          // ── Table header ──────────────────────
+          // ── Table header ─────────────────────────────
           Container(
             color: isDark
                 ? const Color(0xFF0A1628)
-                : const Color(0xFFF1F3F4),
+                : const Color(0xFFF1F5F9),
             padding: const EdgeInsets.symmetric(
-                horizontal: 16, vertical: 8),
+                horizontal: 16, vertical: 9),
             child: Row(children: [
-              Expanded(flex: 4,
+              Expanded(
+                  flex: 4,
                   child: Text('Message',
                       style: TextStyle(
                           color: AppTheme.textSecondary(context),
                           fontSize: 11,
-                          fontWeight: FontWeight.w600))),
-              Expanded(flex: 2,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3))),
+              Expanded(
+                  flex: 2,
                   child: Text('Server',
                       style: TextStyle(
                           color: AppTheme.textSecondary(context),
                           fontSize: 11,
-                          fontWeight: FontWeight.w600))),
-              Expanded(flex: 1,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3))),
+              Expanded(
+                  flex: 1,
                   child: Text('Severity',
                       style: TextStyle(
                           color: AppTheme.textSecondary(context),
                           fontSize: 11,
-                          fontWeight: FontWeight.w600))),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3))),
             ]),
           ),
 
           Divider(height: 1, color: borderColor),
 
-          // ── Alert rows ────────────────────────
+          // ── Alert rows ───────────────────────────────
           Expanded(
             child: loading
                 ? const Center(
@@ -186,16 +201,28 @@ class _AlertsScreenState extends State<AlertsScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.error,
-                                color: AppColors.critical, size: 32),
-                            const SizedBox(height: 8),
+                            const Icon(Icons.error_rounded,
+                                color: AppColors.critical, size: 36),
+                            const SizedBox(height: 10),
                             Text(error,
                                 style: TextStyle(
-                                    color: AppTheme.textSecondary(context))),
-                            const SizedBox(height: 12),
-                            OutlinedButton(
+                                    color: AppTheme.textSecondary(context),
+                                    fontSize: 13),
+                                textAlign: TextAlign.center),
+                            const SizedBox(height: 14),
+                            OutlinedButton.icon(
                               onPressed: loadAlerts,
-                              child: const Text('Retry'),
+                              icon: const Icon(Icons.refresh_rounded,
+                                  size: 14),
+                              label: const Text('Retry'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.accent,
+                                side: BorderSide(
+                                    color: AppColors.accent
+                                        .withValues(alpha: 0.5)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8)),
+                              ),
                             ),
                           ],
                         ),
@@ -209,15 +236,25 @@ class _AlertsScreenState extends State<AlertsScreen> {
                                   mainAxisAlignment:
                                       MainAxisAlignment.center,
                                   children: [
-                                    const Icon(Icons.check_circle,
-                                        color: AppColors.success,
-                                        size: 40),
-                                    const SizedBox(height: 12),
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.success
+                                            .withValues(alpha: 0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                          Icons.check_circle_rounded,
+                                          color: AppColors.success,
+                                          size: 40),
+                                    ),
+                                    const SizedBox(height: 14),
                                     Text('No active alerts',
-                                        style: TextStyle(
+                                        style: GoogleFonts.inter(
                                             color: textPrimary,
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500)),
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 4),
                                     Text('All systems running normally',
                                         style: TextStyle(
                                             color: textMuted,
@@ -227,34 +264,46 @@ class _AlertsScreenState extends State<AlertsScreen> {
                               )
                             : ListView.separated(
                                 itemCount: filteredAlerts.length,
-                                separatorBuilder: (_, _) =>
+                                separatorBuilder: (_, __) =>
                                     Divider(height: 1, color: borderColor),
                                 itemBuilder: (context, index) {
                                   final alert = filteredAlerts[index];
                                   final severity =
-                                      alert['severity'] ?? 'LOW';
-                                  final sColor = severity == 'HIGH'
-                                      ? AppColors.critical
-                                      : severity == 'MEDIUM'
-                                          ? AppColors.warning
-                                          : AppColors.info;
+                                      (alert['severity'] ?? 'LOW')
+                                          .toString()
+                                          .toUpperCase();
+                                  final sColor = _severityColor(severity);
+
                                   return Container(
                                     color: cardColor,
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 16, vertical: 10),
+                                        horizontal: 16, vertical: 12),
                                     child: Row(children: [
+                                      // Message
                                       Expanded(
                                         flex: 4,
                                         child: Row(children: [
-                                          Icon(Icons.warning_rounded,
-                                              color: sColor, size: 14),
+                                          Container(
+                                            padding: const EdgeInsets.all(5),
+                                            decoration: BoxDecoration(
+                                              color: sColor.withValues(
+                                                  alpha: 0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Icon(
+                                                Icons.warning_amber_rounded,
+                                                color: sColor,
+                                                size: 13),
+                                          ),
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
                                               alert['message'] ?? 'Alert',
                                               style: TextStyle(
                                                   color: textPrimary,
-                                                  fontSize: 12),
+                                                  fontSize: 12,
+                                                  height: 1.4),
                                               maxLines: 2,
                                               overflow:
                                                   TextOverflow.ellipsis,
@@ -262,31 +311,34 @@ class _AlertsScreenState extends State<AlertsScreen> {
                                           ),
                                         ]),
                                       ),
+                                      // Server
                                       Expanded(
                                         flex: 2,
                                         child: Text(
                                           alert['serverId'] ?? 'N/A',
                                           style: TextStyle(
                                               color: AppColors.accent,
-                                              fontSize: 11),
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w500),
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
+                                      // Severity badge
                                       Expanded(
                                         flex: 1,
                                         child: Container(
                                           padding:
                                               const EdgeInsets.symmetric(
                                                   horizontal: 6,
-                                                  vertical: 3),
+                                                  vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: sColor
-                                                .withValues(alpha: 0.12),
+                                            color: sColor.withValues(
+                                                alpha: 0.12),
                                             borderRadius:
-                                                BorderRadius.circular(3),
+                                                BorderRadius.circular(6),
                                             border: Border.all(
                                                 color: sColor.withValues(
-                                                    alpha: 0.4)),
+                                                    alpha: 0.45)),
                                           ),
                                           child: Text(
                                             severity,
@@ -294,7 +346,9 @@ class _AlertsScreenState extends State<AlertsScreen> {
                                               color: sColor,
                                               fontSize: 9,
                                               fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.3,
                                             ),
+                                            textAlign: TextAlign.center,
                                           ),
                                         ),
                                       ),

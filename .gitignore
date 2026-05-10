@@ -54,3 +54,6 @@ app.*.map.json
 infrastructure/.terraform/
 infrastructure/terraform.tfstate
 infrastructure/terraform.tfstate.backup
+infrastructure/.terraform/
+infrastructure/.terraform.lock.hcl
+infrastructure/modules/lambda/zips/

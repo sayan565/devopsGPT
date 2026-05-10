@@ -15,6 +15,8 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen>
     with TickerProviderStateMixin {
+  final _wsService = WebSocketService(); // ← FIXED: added this
+
   List<dynamic> servers = [];
   List<dynamic> alerts  = [];
   bool loading          = true;
@@ -40,15 +42,14 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   void _connectWebSocket() {
-    wsService.connect();
-    _wsSub = wsService.stream.listen((data) {
+    _wsService.connect(); // ← FIXED
+    _wsSub = _wsService.stream.listen((data) { // ← FIXED
       if (!mounted) return;
       if (data['type'] == 'metrics_update') {
         setState(() {
           if (data['servers'] != null) servers = data['servers'];
           if (data['alerts']  != null) alerts  = data['alerts'];
           _wsConnected = true;
-          // Reset countdown since we got live data
           _countdown = 30;
         });
         _fadeController.forward(from: 0);
@@ -185,8 +186,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
-            // ── Page header row ───────────────────
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -200,9 +199,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   Text('Overview of your cloud infrastructure',
                       style: TextStyle(color: textMuted, fontSize: 12)),
                 ]),
-                // Refresh + countdown
                 Row(children: [
-                  // WS live indicator
                   if (_wsConnected)
                     Container(
                       margin: const EdgeInsets.only(right: 8),
@@ -270,14 +267,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ]),
               ],
             ),
-
             const SizedBox(height: 16),
-
-            // ── Status banner ─────────────────────
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: criticalCount > 0
@@ -296,7 +289,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 Expanded(
                   child: Text(
                     criticalCount > 0
-                        ? '⚡ Auto-Healing Active — ${criticalCount} critical server(s) detected'
+                        ? '⚡ Auto-Healing Active — $criticalCount critical server(s) detected'
                         : '✅ All Systems Healthy — ${servers.length} servers running normally',
                     style: const TextStyle(
                         color: Colors.white,
@@ -309,39 +302,27 @@ class _DashboardScreenState extends State<DashboardScreen>
                         color: Colors.white70, fontSize: 11)),
               ]),
             ),
-
             const SizedBox(height: 16),
-
-            // ── Metric cards ──────────────────────
             Row(children: [
               _metricCard(context, 'Total Servers',
-                  '${servers.length}', Icons.storage_rounded,
-                  AppColors.accent),
+                  '${servers.length}', Icons.storage_rounded, AppColors.accent),
               const SizedBox(width: 12),
               _metricCard(context, 'Healthy',
-                  '$healthyCount', Icons.check_circle_rounded,
-                  AppColors.success),
+                  '$healthyCount', Icons.check_circle_rounded, AppColors.success),
               const SizedBox(width: 12),
               _metricCard(context, 'Alerts',
-                  '${alerts.length}', Icons.notifications_rounded,
-                  AppColors.warning),
+                  '${alerts.length}', Icons.notifications_rounded, AppColors.warning),
               const SizedBox(width: 12),
               _metricCard(context, 'Critical',
-                  '$criticalCount', Icons.dangerous_rounded,
-                  AppColors.critical),
+                  '$criticalCount', Icons.dangerous_rounded, AppColors.critical),
             ]),
-
             const SizedBox(height: 20),
-
-            // ── Server Metrics panel ──────────────
             _awsPanel(
               context,
               title: 'Server Metrics',
               icon: Icons.bar_chart_rounded,
               child: ServerChartsGrid(servers: servers),
             ),
-
-            // ── Recent Alerts panel ───────────────
             if (alerts.isNotEmpty) ...[
               const SizedBox(height: 16),
               _awsPanel(
@@ -355,7 +336,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
               ),
             ],
-
             const SizedBox(height: 24),
           ],
         ),
@@ -363,9 +343,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── AWS-style bordered panel ──────────────────
-  Widget _awsPanel(
-    BuildContext context, {
+  Widget _awsPanel(BuildContext context, {
     required String title,
     required IconData icon,
     Color? iconColor,
@@ -384,18 +362,13 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Panel header
           Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              border: Border(
-                  bottom: BorderSide(color: borderColor)),
+              border: Border(bottom: BorderSide(color: borderColor)),
             ),
             child: Row(children: [
-              Icon(icon,
-                  color: iconColor ?? AppColors.accent,
-                  size: 15),
+              Icon(icon, color: iconColor ?? AppColors.accent, size: 15),
               const SizedBox(width: 8),
               Text(title,
                   style: GoogleFonts.inter(
@@ -405,17 +378,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                   )),
             ]),
           ),
-          // Panel body
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: child,
-          ),
+          Padding(padding: const EdgeInsets.all(12), child: child),
         ],
       ),
     );
   }
 
-  // ── Metric card ───────────────────────────────
   Widget _metricCard(BuildContext context, String label,
       String value, IconData icon, Color color) {
     final isDark    = Theme.of(context).brightness == Brightness.dark;
@@ -427,8 +395,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-              color: color.withValues(alpha: isDark ? 0.35 : 0.4)),
+          border: Border.all(color: color.withValues(alpha: isDark ? 0.35 : 0.4)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -439,8 +406,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: color.withValues(
-                        alpha: isDark ? 0.2 : 0.1),
+                    color: color.withValues(alpha: isDark ? 0.2 : 0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Icon(icon, color: color, size: 14),
@@ -468,15 +434,12 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── Alert row ─────────────────────────────────
   Widget _alertRow(BuildContext context, dynamic alert) {
     final borderColor = AppTheme.cardBorder(context);
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        border: Border(
-            bottom: BorderSide(color: borderColor, width: 0.5)),
+        border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
       ),
       child: Row(children: [
         Container(
@@ -495,27 +458,23 @@ class _DashboardScreenState extends State<DashboardScreen>
             children: [
               Text(alert['message'] ?? 'Alert',
                   style: TextStyle(
-                      color: AppTheme.textPrimary(context),
-                      fontSize: 12),
+                      color: AppTheme.textPrimary(context), fontSize: 12),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
               Text(
                 '${alert['serverId'] ?? ''} · ${alert['severity'] ?? ''}',
                 style: TextStyle(
-                    color: AppTheme.textMuted(context),
-                    fontSize: 10),
+                    color: AppTheme.textMuted(context), fontSize: 10),
               ),
             ],
           ),
         ),
         Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 8, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             color: AppColors.warning.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(3),
-            border: Border.all(
-                color: AppColors.warning.withValues(alpha: 0.4)),
+            border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
           ),
           child: Text(
             (alert['severity'] ?? 'WARN').toUpperCase(),

@@ -24,11 +24,13 @@ class _LogsScreenState extends State<LogsScreen> {
   Future<void> loadLogs() async {
     setState(() { loading = true; error = ''; });
     try {
-      final data = await ApiService.getLogs();
-      data.sort((a, b) =>
-          (b['timestamp'] ?? '').compareTo(a['timestamp'] ?? ''));
+      final data = await ApiService.getLogs(); // returns Map
+      // ← FIXED: extract the logs list from the map
+      final logsList = List<dynamic>.from(data['logs'] ?? []);
+      logsList.sort((a, b) =>
+          (b['timestamp'] ?? 0).compareTo(a['timestamp'] ?? 0));
       setState(() {
-        logs    = data;
+        logs    = logsList;
         loading = false;
       });
     } catch (e) {
@@ -70,26 +72,21 @@ class _LogsScreenState extends State<LogsScreen> {
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
-        title: Text("Logs",
-            style: TextStyle(color: textPrimary)),
+        title: Text("Logs", style: TextStyle(color: textPrimary)),
         backgroundColor: Colors.transparent,
         iconTheme: IconThemeData(color: textPrimary),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh,
-                color: AppColors.accent),
+            icon: const Icon(Icons.refresh, color: AppColors.accent),
             onPressed: loadLogs,
           )
         ],
       ),
       body: Column(
         children: [
-
-          // Filter buttons
           Container(
             color: cardColor,
-            padding: const EdgeInsets.symmetric(
-                horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -103,30 +100,22 @@ class _LogsScreenState extends State<LogsScreen> {
                 ].map((type) {
                   bool isSelected = filterType == type;
                   return GestureDetector(
-                    onTap: () =>
-                        setState(() => filterType = type),
+                    onTap: () => setState(() => filterType = type),
                     child: Container(
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.accent
-                            : bgColor,
-                        borderRadius:
-                            BorderRadius.circular(20),
+                        color: isSelected ? AppColors.accent : bgColor,
+                        borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: isSelected
-                              ? AppColors.accent
-                              : unselectedBorder,
+                          color: isSelected ? AppColors.accent : unselectedBorder,
                         ),
                       ),
                       child: Text(
                         type,
                         style: TextStyle(
-                          color: isSelected
-                              ? Colors.white
-                              : unselectedText,
+                          color: isSelected ? Colors.white : unselectedText,
                           fontSize: 11,
                           fontWeight: isSelected
                               ? FontWeight.bold
@@ -139,115 +128,73 @@ class _LogsScreenState extends State<LogsScreen> {
               ),
             ),
           ),
-
-          // Logs list
           Expanded(
             child: loading
                 ? const Center(
-                    child: CircularProgressIndicator(
-                        color: AppColors.accent))
+                    child: CircularProgressIndicator(color: AppColors.accent))
                 : error.isNotEmpty
                     ? Center(
                         child: Text(error,
-                            style: TextStyle(
-                                color: textSecondary)))
+                            style: TextStyle(color: textSecondary)))
                     : filteredLogs.isEmpty
                         ? Center(
                             child: Text("No logs found",
-                                style: TextStyle(
-                                    color: textMuted)))
+                                style: TextStyle(color: textMuted)))
                         : RefreshIndicator(
                             onRefresh: loadLogs,
                             color: AppColors.accent,
                             child: ListView.builder(
-                              padding:
-                                  const EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(12),
                               itemCount: filteredLogs.length,
                               itemBuilder: (context, index) {
-                                final log =
-                                    filteredLogs[index];
-                                String type =
-                                    log['type'] ?? 'INFO';
-                                final logColor =
-                                    getLogColor(type);
+                                final log = filteredLogs[index];
+                                String type = log['type'] ?? 'INFO';
+                                final logColor = getLogColor(type);
                                 return Container(
-                                  margin: const EdgeInsets
-                                      .only(bottom: 6),
-                                  padding:
-                                      const EdgeInsets.all(
-                                          10),
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
                                     color: cardColor,
-                                    borderRadius:
-                                        BorderRadius
-                                            .circular(8),
+                                    borderRadius: BorderRadius.circular(8),
                                     border: Border.all(
-                                      color: logColor
-                                          .withValues(
-                                              alpha: 0.3),
+                                      color: logColor.withValues(alpha: 0.3),
                                     ),
                                   ),
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment
-                                            .start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Row(children: [
                                         Container(
-                                          padding: const EdgeInsets
-                                              .symmetric(
-                                                  horizontal:
-                                                      6,
-                                                  vertical:
-                                                      2),
-                                          decoration:
-                                              BoxDecoration(
-                                            color: logColor
-                                                .withValues(
-                                                    alpha:
-                                                        0.15),
-                                            borderRadius:
-                                                BorderRadius
-                                                    .circular(
-                                                        4),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: logColor.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(4),
                                           ),
                                           child: Text(
                                             type,
                                             style: TextStyle(
-                                              color:
-                                                  logColor,
+                                              color: logColor,
                                               fontSize: 10,
-                                              fontWeight:
-                                                  FontWeight
-                                                      .bold,
+                                              fontWeight: FontWeight.bold,
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(
-                                            width: 8),
+                                        const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            log['timestamp'] ??
-                                                '',
+                                            log['time_str'] ?? log['timestamp']?.toString() ?? '',
                                             style: TextStyle(
-                                              color:
-                                                  textMuted,
-                                              fontSize: 10,
-                                            ),
-                                            overflow:
-                                                TextOverflow
-                                                    .ellipsis,
+                                                color: textMuted, fontSize: 10),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       ]),
-                                      const SizedBox(
-                                          height: 6),
+                                      const SizedBox(height: 6),
                                       Text(
                                         log['message'] ?? '',
                                         style: TextStyle(
-                                          color: textPrimary,
-                                          fontSize: 12,
-                                        ),
+                                            color: textPrimary, fontSize: 12),
                                       ),
                                     ],
                                   ),

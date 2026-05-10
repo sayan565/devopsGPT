@@ -460,7 +460,7 @@ class _LargeLineChart extends StatelessWidget {
             barWidth: 2.5,
             dotData: FlDotData(
               show: true,
-              getDotPainter: (spot, _, __, ___) =>
+              getDotPainter: (spot, _, _, _) =>
                   FlDotCirclePainter(
                 radius: 3,
                 color: color,

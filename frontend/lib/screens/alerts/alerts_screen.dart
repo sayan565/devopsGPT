@@ -227,7 +227,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
                               )
                             : ListView.separated(
                                 itemCount: filteredAlerts.length,
-                                separatorBuilder: (_, __) =>
+                                separatorBuilder: (_, _) =>
                                     Divider(height: 1, color: borderColor),
                                 itemBuilder: (context, index) {
                                   final alert = filteredAlerts[index];

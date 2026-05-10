@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/animated_background.dart';
 import '../../services/api_service.dart';
+import 'aws_connect_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -142,25 +143,37 @@ class _LoginScreenState extends State<LoginScreen>
           email: email, password: pass);
       await credential.user?.updateDisplayName(username);
 
-      // Register as new tenant automatically
+      final uid = credential.user?.uid ?? '';
+      String tenantId = '';
+
+      // Register tenant with pending ARN — user will fill it in next screen
       try {
         final result = await ApiService.registerTenant(
           name: username,
           email: email,
+          uid: uid,
         );
-        ApiService.currentTenantId = result['tenant_id'] ?? '';
+        tenantId = result['tenant_id'] ?? '';
+        ApiService.currentTenantId = tenantId;
       } catch (e) {
-        // Non-fatal — tenant can be registered later
         debugPrint('[SignUp] Tenant registration failed: $e');
       }
 
-      setState(() {
-        _isLoading = false;
-        _success   = 'Account created! You can now sign in.';
-        _usernameController.clear();
-        _emailController.clear();
-        _signUpPasswordController.clear();
-      });
+      setState(() { _isLoading = false; });
+
+      if (mounted) {
+        // Navigate to AWS connect onboarding screen
+        Navigator.pushReplacementNamed(
+          context,
+          '/aws-connect',
+          arguments: {
+            'username': username,
+            'email':    email,
+            'uid':      uid,
+            'tenantId': tenantId,
+          },
+        );
+      }
     } on FirebaseAuthException catch (e) {
       setState(() { _isLoading = false; _error = _friendlyError(e); });
     } catch (e) {

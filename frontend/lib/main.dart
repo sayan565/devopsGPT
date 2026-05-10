@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/auth/aws_connect_screen.dart';
 
 final themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.dark);
 
@@ -38,8 +39,18 @@ class MyApp extends StatelessWidget {
           theme: _buildLightTheme(),
           initialRoute: '/login',
           routes: {
-            '/login': (_) => const LoginScreen(),
-            '/home':  (_) => const HomeScreen(),
+            '/login':       (_) => const LoginScreen(),
+            '/home':        (_) => const HomeScreen(),
+            '/aws-connect': (ctx) {
+              final args = ModalRoute.of(ctx)!.settings.arguments
+                  as Map<String, dynamic>;
+              return AwsConnectScreen(
+                username: args['username'] as String,
+                email:    args['email']    as String,
+                uid:      args['uid']      as String,
+                tenantId: args['tenantId'] as String,
+              );
+            },
           },
         );
       },

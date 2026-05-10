@@ -8,7 +8,7 @@ class ApiConfig {
   );
   static const apiKey = String.fromEnvironment(
     'API_KEY',
-    defaultValue: '',
+    defaultValue: '934I15zv8k9EiSnf01q6rawwuW1sZgkk7am2UoST',
   );
 }
 
@@ -107,7 +107,7 @@ class ApiService {
     return triggerFix(instanceId, action);
   }
 
-  // ── Tenant Registration ───────────────────────────────────────────────────
+  // ── Tenant Registration (initial — no ARN yet) ───────────────────────────
   static Future<Map<String, dynamic>> registerTenant({
     required String name,
     required String email,
@@ -116,8 +116,26 @@ class ApiService {
     final uri = Uri.parse('${ApiConfig.baseUrl}/tenants');
     return _post(uri, {
       'name': name,
-      'aws_account_id': '',
-      'role_arn': '',
+      'email': email,
+      'aws_account_id': 'pending',
+      'role_arn': 'pending',
+      if (uid.isNotEmpty) 'uid': uid,
+    });
+  }
+
+  // ── Update tenant with real ARN after AWS onboarding ─────────────────────
+  static Future<Map<String, dynamic>> updateTenantArn({
+    required String tenantId,
+    required String roleArn,
+    required String awsAccountId,
+  }) async {
+    // Uses the same /tenants endpoint with tenant_id to update the ARN
+    final uri = Uri.parse('${ApiConfig.baseUrl}/tenants');
+    return _post(uri, {
+      'tenant_id':      tenantId,
+      'role_arn':       roleArn,
+      'aws_account_id': awsAccountId,
+      'action':         'update_arn',
     });
   }
 

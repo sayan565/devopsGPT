@@ -12,11 +12,12 @@ resource "aws_api_gateway_rest_api" "api" {
 
 locals {
   routes = {
-    servers  = { path = "servers",  method = "GET",  lambda = "list_servers" }
-    alerts   = { path = "alerts",   method = "GET",  lambda = "alert_processor" }
-    logs     = { path = "logs",     method = "GET",  lambda = "metrics_streamer" }
-    ai_chat  = { path = "ai-chat",  method = "POST", lambda = "ai_analyzer" }
-    fix      = { path = "fix",      method = "POST", lambda = "auto_healer" }
+    servers        = { path = "servers",        method = "GET",  lambda = "list_servers" }
+    alerts         = { path = "alerts",         method = "GET",  lambda = "alert_processor" }
+    logs           = { path = "logs",           method = "GET",  lambda = "metrics_streamer" }
+    ai_chat        = { path = "ai-chat",        method = "POST", lambda = "ai_analyzer" }
+    fix            = { path = "fix",            method = "POST", lambda = "auto_healer" }
+    tenant_onboard = { path = "tenants", method = "POST", lambda = "tenant_onboarding" }
   }
 }
 

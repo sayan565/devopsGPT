@@ -13,6 +13,9 @@ class ApiConfig {
 }
 
 class ApiService {
+  // Current tenant id — set after login/signup
+  static String currentTenantId = '';
+
   static Map<String, String> get _headers => {
     'Content-Type': 'application/json',
     'x-api-key': ApiConfig.apiKey,
@@ -20,8 +23,9 @@ class ApiService {
 
   // ── Servers ──────────────────────────────────────────────
   static Future<List<dynamic>> getServers({String? tenantId}) async {
+    final tid = tenantId ?? currentTenantId;
     final uri = Uri.parse('${ApiConfig.baseUrl}/servers').replace(
-      queryParameters: tenantId != null ? {'tenant_id': tenantId} : null,
+      queryParameters: tid.isNotEmpty ? {'tenant_id': tid} : null,
     );
     final res = await _get(uri);
     return res['servers'] ?? [];
@@ -29,8 +33,9 @@ class ApiService {
 
   // ── Alerts ───────────────────────────────────────────────
   static Future<List<dynamic>> getAlerts({String? tenantId}) async {
+    final tid = tenantId ?? currentTenantId;
     final uri = Uri.parse('${ApiConfig.baseUrl}/alerts').replace(
-      queryParameters: tenantId != null ? {'tenant_id': tenantId} : null,
+      queryParameters: tid.isNotEmpty ? {'tenant_id': tid} : null,
     );
     final res = await _get(uri);
     return res['alerts'] ?? [];
@@ -39,12 +44,29 @@ class ApiService {
   // ── Logs ─────────────────────────────────────────────────
   static Future<Map<String, dynamic>> getLogs({String? prefix, String? tenantId}) async {
     final params = <String, String>{};
-    if (tenantId != null) params['tenant_id'] = tenantId;
+    final tid = tenantId ?? currentTenantId;
+    if (tid.isNotEmpty) params['tenant_id'] = tid;
     if (prefix != null) params['prefix'] = prefix;
     final uri = Uri.parse('${ApiConfig.baseUrl}/logs').replace(
       queryParameters: params.isNotEmpty ? params : null,
     );
     return _get(uri);
+  }
+
+  // ── Tenant Registration ───────────────────────────────────
+  static Future<Map<String, dynamic>> registerTenant({
+    required String name,
+    required String email,
+    required String uid,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/tenants');
+    return _post(uri, {
+      'name': name,
+      'email': email,
+      'aws_account_id': '',
+      'role_arn': '',
+      'uid': uid,
+    });
   }
 
   // ── AI Chat ───────────────────────────────────────────────

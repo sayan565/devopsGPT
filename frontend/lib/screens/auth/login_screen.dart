@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/animated_background.dart';
+import '../../services/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -112,8 +113,13 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() { _isLoading = true; _error = ''; });
 
     try {
-      await _auth.signInWithEmailAndPassword(
+      final userCredential = await _auth.signInWithEmailAndPassword(
           email: email, password: pass);
+
+      // Store uid as tenant lookup key
+      final uid = userCredential.user?.uid ?? '';
+      await _loadTenantId(uid);
+
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/home');
       }
@@ -127,6 +133,17 @@ class _LoginScreenState extends State<LoginScreen>
         _isLoading = false;
         _error = 'An unexpected error occurred.';
       });
+    }
+  }
+
+  // ── Load Tenant ID after login ────────────────
+  Future<void> _loadTenantId(String uid) async {
+    try {
+      // Try to get tenant_id stored in Firebase user claims
+      // For now store uid as tenant_id — we'll map it later
+      ApiService.currentTenantId = uid;
+    } catch (e) {
+      ApiService.currentTenantId = '';
     }
   }
 
@@ -148,6 +165,19 @@ class _LoginScreenState extends State<LoginScreen>
           email: email, password: pass);
       // Save display name
       await credential.user?.updateDisplayName(username);
+
+      // Register as new tenant automatically
+      try {
+        final result = await ApiService.registerTenant(
+          name: username,
+          email: email,
+          uid: credential.user?.uid ?? '',
+        );
+        ApiService.currentTenantId = result['tenant_id'] ?? '';
+      } catch (e) {
+        // Non-fatal — can register later
+      }
+
       setState(() {
         _isLoading = false;
         _success   = 'Account created! You can now sign in.';

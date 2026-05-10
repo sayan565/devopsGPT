@@ -16,6 +16,7 @@ locals {
     auto_healer       = "lambdas/auto_healer"
     metrics_streamer  = "lambdas/metrics_streamer"
     websocket_handler = "lambdas/websocket_handler"
+    tenant_onboarding = "lambdas/tenant_onboarding"
   }
 
   common_env = {

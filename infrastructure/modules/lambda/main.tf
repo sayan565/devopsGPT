@@ -17,6 +17,7 @@ locals {
     metrics_streamer  = "lambdas/metrics_streamer"
     websocket_handler = "lambdas/websocket_handler"
     tenant_onboarding = "lambdas/tenant_onboarding"
+    tenant_lookup = "lambdas/tenant_lookup"
   }
 
   common_env = {

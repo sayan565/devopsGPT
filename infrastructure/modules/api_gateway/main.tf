@@ -18,6 +18,7 @@ locals {
     ai_chat        = { path = "ai-chat",        method = "POST", lambda = "ai_analyzer" }
     fix            = { path = "fix",            method = "POST", lambda = "auto_healer" }
     tenant_onboard = { path = "tenants", method = "POST", lambda = "tenant_onboarding" }
+    tenant_lookup = { path = "tenants-lookup", method = "GET", lambda = "tenant_lookup" }
   }
 }
 

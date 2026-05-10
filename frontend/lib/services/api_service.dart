@@ -13,7 +13,7 @@ class ApiConfig {
 }
 
 class ApiService {
-  // Current tenant id — set after login/signup
+  // ── Set this after login — every call uses it automatically ──────────────
   static String currentTenantId = '';
 
   static Map<String, String> get _headers => {
@@ -21,108 +21,107 @@ class ApiService {
     'x-api-key': ApiConfig.apiKey,
   };
 
-  // ── Servers ──────────────────────────────────────────────
-  static Future<List<dynamic>> getServers({String? tenantId}) async {
-    final tid = tenantId ?? currentTenantId;
-    final uri = Uri.parse('${ApiConfig.baseUrl}/servers').replace(
-      queryParameters: tid.isNotEmpty ? {'tenant_id': tid} : null,
-    );
+  // Builds query params and auto-injects tenant_id if set
+  static Map<String, String> _params([Map<String, String>? extra]) {
+    final p = <String, String>{};
+    if (currentTenantId.isNotEmpty) p['tenant_id'] = currentTenantId;
+    if (extra != null) p.addAll(extra);
+    return p;
+  }
+
+  // ── Tenant lookup by email (called right after login) ────────────────────
+  static Future<Map<String, dynamic>> getTenantByEmail(String email) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/tenants-lookup')
+        .replace(queryParameters: {'email': email});
+    return _get(uri);
+  }
+
+  // ── Servers ──────────────────────────────────────────────────────────────
+  static Future<List<dynamic>> getServers() async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/servers')
+        .replace(queryParameters: _params());
     final res = await _get(uri);
     return res['servers'] ?? [];
   }
 
-  // ── Alerts ───────────────────────────────────────────────
-  static Future<List<dynamic>> getAlerts({String? tenantId}) async {
-    final tid = tenantId ?? currentTenantId;
-    final uri = Uri.parse('${ApiConfig.baseUrl}/alerts').replace(
-      queryParameters: tid.isNotEmpty ? {'tenant_id': tid} : null,
-    );
+  // ── Alerts ───────────────────────────────────────────────────────────────
+  static Future<List<dynamic>> getAlerts() async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/alerts')
+        .replace(queryParameters: _params());
     final res = await _get(uri);
     return res['alerts'] ?? [];
   }
 
-  // ── Logs ─────────────────────────────────────────────────
-  static Future<Map<String, dynamic>> getLogs({String? prefix, String? tenantId}) async {
-    final params = <String, String>{};
-    final tid = tenantId ?? currentTenantId;
-    if (tid.isNotEmpty) params['tenant_id'] = tid;
-    if (prefix != null) params['prefix'] = prefix;
+  // ── Logs ─────────────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> getLogs({String? prefix}) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/logs').replace(
-      queryParameters: params.isNotEmpty ? params : null,
+      queryParameters: _params(prefix != null ? {'prefix': prefix} : null),
     );
     return _get(uri);
   }
 
-  // ── Tenant Registration ───────────────────────────────────
-  static Future<Map<String, dynamic>> registerTenant({
-    required String name,
-    required String email,
-    required String uid,
-  }) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/tenants');
-    return _post(uri, {
-      'name': name,
-      'email': email,
-      'aws_account_id': '',
-      'role_arn': '',
-      'uid': uid,
-    });
-  }
-
-  // ── AI Chat ───────────────────────────────────────────────
+  // ── AI Chat ───────────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>> sendAiMessage(
     String message, {
-    String? tenantId,
     String? sessionId,
     Map<String, dynamic>? contextData,
   }) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/ai-chat');
     return _post(uri, {
       'message': message,
-      'tenant_id': ?tenantId,
-      'session_id': ?sessionId,
-      'context': ?contextData,
+      if (currentTenantId.isNotEmpty) 'tenant_id': currentTenantId,
+      if (sessionId != null)   'session_id': sessionId,
+      if (contextData != null) 'context': contextData,
     });
   }
 
-  // ── AI Chat with history ──────────────────────────────────
+  // ── AI Chat with history ──────────────────────────────────────────────────
   static Future<Map<String, dynamic>> sendAiMessageWithHistory(
     String message,
-    List<Map<String, dynamic>> history, {
-    String? tenantId,
-  }) async {
+    List<Map<String, dynamic>> history,
+  ) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/ai-chat');
     return _post(uri, {
       'message': message,
       'history': history,
-      'tenant_id': ?tenantId,
+      if (currentTenantId.isNotEmpty) 'tenant_id': currentTenantId,
     });
   }
 
-  // ── Auto-Fix ──────────────────────────────────────────────
+  // ── Auto-Fix ──────────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>> triggerFix(
     String instanceId,
-    String action, {
-    String? tenantId,
-  }) async {
+    String action,
+  ) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/fix');
     return _post(uri, {
       'instance_id': instanceId,
       'action': action,
-      'tenant_id': ?tenantId,
+      if (currentTenantId.isNotEmpty) 'tenant_id': currentTenantId,
     });
   }
 
-  // ── Fix Server (alias) ────────────────────────────────────
+  // ── Fix Server (alias) ────────────────────────────────────────────────────
   static Future<Map<String, dynamic>> fixServer(
-    String instanceId,
-    String action, {
-    String? tenantId,
-  }) async {
-    return triggerFix(instanceId, action, tenantId: tenantId);
+      String instanceId, String action) async {
+    return triggerFix(instanceId, action);
   }
 
-  // ── Private helpers ───────────────────────────────────────
+  // ── Tenant Registration ───────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> registerTenant({
+    required String name,
+    required String email,
+    String uid = '',
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/tenants');
+    return _post(uri, {
+      'name': name,
+      'aws_account_id': '',
+      'role_arn': '',
+    });
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────────────
   static Future<Map<String, dynamic>> _get(Uri uri) async {
     try {
       final response = await http

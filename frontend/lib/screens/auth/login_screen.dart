@@ -16,14 +16,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
 
-  // ── Tab: 0 = Sign In, 1 = Sign Up ────────────
   int _tabIndex = 0;
 
-  // Sign In controllers
   final _signInEmailController    = TextEditingController();
   final _signInPasswordController = TextEditingController();
-
-  // Sign Up controllers
   final _usernameController       = TextEditingController();
   final _emailController          = TextEditingController();
   final _signUpPasswordController = TextEditingController();
@@ -76,27 +72,29 @@ class _LoginScreenState extends State<LoginScreen>
     });
   }
 
-  // ── Convert Firebase error codes to friendly messages ──
   String _friendlyError(FirebaseAuthException e) {
     switch (e.code) {
-      case 'user-not-found':
-        return 'No account found with this email.';
-      case 'wrong-password':
-        return 'Incorrect password. Please try again.';
-      case 'invalid-email':
-        return 'Please enter a valid email address.';
-      case 'email-already-in-use':
-        return 'An account already exists with this email.';
-      case 'weak-password':
-        return 'Password must be at least 6 characters.';
-      case 'too-many-requests':
-        return 'Too many attempts. Please try again later.';
-      case 'network-request-failed':
-        return 'Network error. Check your connection.';
-      case 'invalid-credential':
-        return 'Invalid email or password.';
-      default:
-        return e.message ?? 'An error occurred. Please try again.';
+      case 'user-not-found':      return 'No account found with this email.';
+      case 'wrong-password':      return 'Incorrect password. Please try again.';
+      case 'invalid-email':       return 'Please enter a valid email address.';
+      case 'email-already-in-use':return 'An account already exists with this email.';
+      case 'weak-password':       return 'Password must be at least 6 characters.';
+      case 'too-many-requests':   return 'Too many attempts. Please try again later.';
+      case 'network-request-failed': return 'Network error. Check your connection.';
+      case 'invalid-credential':  return 'Invalid email or password.';
+      default: return e.message ?? 'An error occurred. Please try again.';
+    }
+  }
+
+  // ── Load Tenant ID after login ────────────────
+  Future<void> _loadTenantId(String email) async {
+    try {
+      final result = await ApiService.getTenantByEmail(email);
+      ApiService.currentTenantId = result['tenant_id'] ?? '';
+      debugPrint('[Login] tenant_id loaded: ${ApiService.currentTenantId}');
+    } catch (e) {
+      ApiService.currentTenantId = '';
+      debugPrint('[Login] No tenant found for $email, using default account');
     }
   }
 
@@ -113,37 +111,16 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() { _isLoading = true; _error = ''; });
 
     try {
-      final userCredential = await _auth.signInWithEmailAndPassword(
-          email: email, password: pass);
-
-      // Store uid as tenant lookup key
-      final uid = userCredential.user?.uid ?? '';
-      await _loadTenantId(uid);
+      await _auth.signInWithEmailAndPassword(email: email, password: pass);
+      await _loadTenantId(email);
 
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/home');
       }
     } on FirebaseAuthException catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = _friendlyError(e);
-      });
+      setState(() { _isLoading = false; _error = _friendlyError(e); });
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = 'An unexpected error occurred.';
-      });
-    }
-  }
-
-  // ── Load Tenant ID after login ────────────────
-  Future<void> _loadTenantId(String uid) async {
-    try {
-      // Try to get tenant_id stored in Firebase user claims
-      // For now store uid as tenant_id — we'll map it later
-      ApiService.currentTenantId = uid;
-    } catch (e) {
-      ApiService.currentTenantId = '';
+      setState(() { _isLoading = false; _error = 'An unexpected error occurred.'; });
     }
   }
 
@@ -163,7 +140,6 @@ class _LoginScreenState extends State<LoginScreen>
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
           email: email, password: pass);
-      // Save display name
       await credential.user?.updateDisplayName(username);
 
       // Register as new tenant automatically
@@ -171,11 +147,11 @@ class _LoginScreenState extends State<LoginScreen>
         final result = await ApiService.registerTenant(
           name: username,
           email: email,
-          uid: credential.user?.uid ?? '',
         );
         ApiService.currentTenantId = result['tenant_id'] ?? '';
       } catch (e) {
-        // Non-fatal — can register later
+        // Non-fatal — tenant can be registered later
+        debugPrint('[SignUp] Tenant registration failed: $e');
       }
 
       setState(() {
@@ -186,15 +162,9 @@ class _LoginScreenState extends State<LoginScreen>
         _signUpPasswordController.clear();
       });
     } on FirebaseAuthException catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = _friendlyError(e);
-      });
+      setState(() { _isLoading = false; _error = _friendlyError(e); });
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = 'An unexpected error occurred.';
-      });
+      setState(() { _isLoading = false; _error = 'An unexpected error occurred.'; });
     }
   }
 
@@ -215,20 +185,18 @@ class _LoginScreenState extends State<LoginScreen>
           final textPrimary   = AppTheme.textPrimary(ctx);
           final textMuted     = AppTheme.textMuted(ctx);
           final textSecondary = AppTheme.textSecondary(ctx);
-          final isDark = Theme.of(ctx).brightness == Brightness.dark;
-          final sheetBg  = isDark ? const Color(0xFF0D1424) : Colors.white;
+          final isDark  = Theme.of(ctx).brightness == Brightness.dark;
+          final sheetBg = isDark ? const Color(0xFF0D1424) : Colors.white;
           final borderTop = isDark
               ? const Color(0x1AFFFFFF)
               : const Color(0x20000000);
 
           return Padding(
-            padding: EdgeInsets.only(
-                bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
             child: Container(
               decoration: BoxDecoration(
                 color: sheetBg,
-                borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(28)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                 border: Border(top: BorderSide(color: borderTop)),
               ),
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
@@ -236,54 +204,35 @@ class _LoginScreenState extends State<LoginScreen>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
-                  // Handle
                   Center(
                     child: Container(
                       width: 40, height: 4,
                       decoration: BoxDecoration(
-                        color: AppTheme.textMuted(ctx)
-                            .withValues(alpha: 0.3),
+                        color: AppTheme.textMuted(ctx).withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // Header
                   Row(children: [
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                            colors: AppColors.primaryGradient),
+                        gradient: const LinearGradient(colors: AppColors.primaryGradient),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.email_rounded,
-                          color: Colors.white, size: 20),
+                      child: const Icon(Icons.email_rounded, color: Colors.white, size: 20),
                     ),
                     const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Sign up with Email',
-                            style: GoogleFonts.inter(
-                                color: textPrimary,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold)),
-                        Text('Enter your email and password',
-                            style: GoogleFonts.inter(
-                                color: textMuted, fontSize: 12)),
-                      ],
-                    ),
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Sign up with Email',
+                          style: GoogleFonts.inter(color: textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text('Enter your email and password',
+                          style: GoogleFonts.inter(color: textMuted, fontSize: 12)),
+                    ]),
                   ]),
-
                   const SizedBox(height: 24),
-
-                  // Email
-                  Text('Email Address',
-                      style: TextStyle(
-                          color: textSecondary, fontSize: 13)),
+                  Text('Email Address', style: TextStyle(color: textSecondary, fontSize: 13)),
                   const SizedBox(height: 8),
                   _inputContainer(ctx,
                     child: TextField(
@@ -293,21 +242,14 @@ class _LoginScreenState extends State<LoginScreen>
                       decoration: InputDecoration(
                         hintText: 'john@example.com',
                         hintStyle: TextStyle(color: textMuted, fontSize: 14),
-                        prefixIcon: Icon(Icons.email_rounded,
-                            color: AppColors.accent, size: 20),
+                        prefixIcon: Icon(Icons.email_rounded, color: AppColors.accent, size: 20),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
-                  // Password
-                  Text('Password',
-                      style: TextStyle(
-                          color: textSecondary, fontSize: 13)),
+                  Text('Password', style: TextStyle(color: textSecondary, fontSize: 13)),
                   const SizedBox(height: 8),
                   _inputContainer(ctx,
                     child: TextField(
@@ -317,98 +259,56 @@ class _LoginScreenState extends State<LoginScreen>
                       decoration: InputDecoration(
                         hintText: '••••••••••',
                         hintStyle: TextStyle(color: textMuted, fontSize: 14),
-                        prefixIcon: Icon(Icons.lock_rounded,
-                            color: AppColors.accent, size: 20),
+                        prefixIcon: Icon(Icons.lock_rounded, color: AppColors.accent, size: 20),
                         suffixIcon: IconButton(
-                          icon: Icon(
-                            showPass
-                                ? Icons.visibility_off_rounded
-                                : Icons.visibility_rounded,
-                            color: textMuted, size: 20,
-                          ),
-                          onPressed: () =>
-                              setSheetState(() => showPass = !showPass),
+                          icon: Icon(showPass ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                              color: textMuted, size: 20),
+                          onPressed: () => setSheetState(() => showPass = !showPass),
                         ),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
                     ),
                   ),
-
                   if (sheetError.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     _errorBanner(sheetError),
                   ],
-
                   const SizedBox(height: 24),
-
-                  // Submit
                   GestureDetector(
                     onTap: sheetLoading ? null : () async {
                       final email = emailCtrl.text.trim();
                       final pass  = passCtrl.text.trim();
                       if (email.isEmpty || pass.isEmpty) {
-                        setSheetState(() =>
-                            sheetError = 'Please fill in all fields');
+                        setSheetState(() => sheetError = 'Please fill in all fields');
                         return;
                       }
-                      setSheetState(() {
-                        sheetError   = '';
-                        sheetLoading = true;
-                      });
+                      setSheetState(() { sheetError = ''; sheetLoading = true; });
                       try {
-                        await _auth.createUserWithEmailAndPassword(
-                            email: email, password: pass);
+                        await _auth.createUserWithEmailAndPassword(email: email, password: pass);
                         if (ctx.mounted) {
                           Navigator.pop(ctx);
-                          setState(() {
-                            _success  = 'Account created! You can now sign in.';
-                            _tabIndex = 0;
-                          });
+                          setState(() { _success = 'Account created! You can now sign in.'; _tabIndex = 0; });
                         }
                       } on FirebaseAuthException catch (e) {
-                        setSheetState(() {
-                          sheetLoading = false;
-                          sheetError   = _friendlyError(e);
-                        });
+                        setSheetState(() { sheetLoading = false; sheetError = _friendlyError(e); });
                       }
                     },
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: BoxDecoration(
-                        gradient: sheetLoading
-                            ? null
-                            : const LinearGradient(
-                                colors: AppColors.primaryGradient),
-                        color: sheetLoading
-                            ? AppTheme.cardBorder(ctx)
-                            : null,
+                        gradient: sheetLoading ? null : const LinearGradient(colors: AppColors.primaryGradient),
+                        color: sheetLoading ? AppTheme.cardBorder(ctx) : null,
                         borderRadius: BorderRadius.circular(14),
-                        boxShadow: sheetLoading
-                            ? null
-                            : [
-                                BoxShadow(
-                                  color: AppColors.accent
-                                      .withValues(alpha: 0.3),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+                        boxShadow: sheetLoading ? null : [
+                          BoxShadow(color: AppColors.accent.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 4)),
+                        ],
                       ),
                       child: Center(
                         child: sheetLoading
-                            ? const SizedBox(
-                                width: 20, height: 20,
-                                child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 2))
-                            : Text('Create Account',
-                                style: GoogleFonts.inter(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                )),
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Text('Create Account', style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ),
@@ -421,7 +321,6 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // ── Helper: input container ───────────────────
   Widget _inputContainer(BuildContext ctx, {required Widget child}) {
     return Container(
       decoration: BoxDecoration(
@@ -452,83 +351,40 @@ class _LoginScreenState extends State<LoginScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-
-                      // Logo
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                              colors: AppColors.primaryGradient),
+                          gradient: const LinearGradient(colors: AppColors.primaryGradient),
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
-                            BoxShadow(
-                              color: AppColors.accent
-                                  .withValues(alpha: 0.3),
-                              blurRadius: 30,
-                              spreadRadius: 5,
-                            ),
+                            BoxShadow(color: AppColors.accent.withValues(alpha: 0.3), blurRadius: 30, spreadRadius: 5),
                           ],
                         ),
-                        child: const Icon(
-                          Icons.auto_fix_high_rounded,
-                          color: Colors.white,
-                          size: 48,
-                        ),
+                        child: const Icon(Icons.auto_fix_high_rounded, color: Colors.white, size: 48),
                       ),
-
                       const SizedBox(height: 20),
-
-                      Text('DevOpsGPT',
-                          style: GoogleFonts.inter(
-                            color: textPrimary,
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: -1,
-                          )),
-                      Text('AI Cloud Operations Platform',
-                          style: GoogleFonts.inter(
-                              color: textMuted, fontSize: 14)),
-
+                      Text('DevOpsGPT', style: GoogleFonts.inter(color: textPrimary, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: -1)),
+                      Text('AI Cloud Operations Platform', style: GoogleFonts.inter(color: textMuted, fontSize: 14)),
                       const SizedBox(height: 32),
-
-                      // Tab switcher
                       GlassCard(
                         padding: const EdgeInsets.all(4),
                         borderRadius: 16,
-                        child: Row(children: [
-                          _tabButton('Sign In', 0),
-                          _tabButton('Sign Up', 1),
-                        ]),
+                        child: Row(children: [_tabButton('Sign In', 0), _tabButton('Sign Up', 1)]),
                       ),
-
                       const SizedBox(height: 16),
-
-                      // Form card
                       GlassCard(
                         child: AnimatedSwitcher(
                           duration: const Duration(milliseconds: 300),
-                          transitionBuilder: (child, anim) =>
-                              FadeTransition(opacity: anim, child: child),
-                          child: _tabIndex == 0
-                              ? _buildSignInForm(context)
-                              : _buildSignUpForm(context),
+                          transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+                          child: _tabIndex == 0 ? _buildSignInForm(context) : _buildSignUpForm(context),
                         ),
                       ),
-
                       const SizedBox(height: 24),
-
-                      // Security note
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.lock_rounded,
-                              color: AppColors.success, size: 14),
-                          const SizedBox(width: 6),
-                          Text('Secured with Firebase Auth',
-                              style: GoogleFonts.inter(
-                                  color: textMuted, fontSize: 12)),
-                        ],
-                      ),
+                      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        const Icon(Icons.lock_rounded, color: AppColors.success, size: 14),
+                        const SizedBox(width: 6),
+                        Text('Secured with Firebase Auth', style: GoogleFonts.inter(color: textMuted, fontSize: 12)),
+                      ]),
                     ],
                   ),
                 ),
@@ -540,7 +396,6 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // ── Tab button ────────────────────────────────
   Widget _tabButton(String label, int index) {
     final isActive = _tabIndex == index;
     return Expanded(
@@ -550,30 +405,21 @@ class _LoginScreenState extends State<LoginScreen>
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            gradient: isActive
-                ? const LinearGradient(
-                    colors: AppColors.primaryGradient)
-                : null,
+            gradient: isActive ? const LinearGradient(colors: AppColors.primaryGradient) : null,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Center(
-            child: Text(label,
-                style: GoogleFonts.inter(
-                  color: isActive
-                      ? Colors.white
-                      : AppTheme.textMuted(context),
-                  fontSize: 14,
-                  fontWeight: isActive
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                )),
+            child: Text(label, style: GoogleFonts.inter(
+              color: isActive ? Colors.white : AppTheme.textMuted(context),
+              fontSize: 14,
+              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+            )),
           ),
         ),
       ),
     );
   }
 
-  // ── Sign In form ──────────────────────────────
   Widget _buildSignInForm(BuildContext context) {
     final textPrimary = AppTheme.textPrimary(context);
     final textMuted   = AppTheme.textMuted(context);
@@ -582,81 +428,31 @@ class _LoginScreenState extends State<LoginScreen>
       key: const ValueKey('signin'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Welcome back',
-            style: GoogleFonts.inter(
-                color: textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.bold)),
-        Text('Sign in to your account',
-            style: GoogleFonts.inter(
-                color: textMuted, fontSize: 13)),
-
+        Text('Welcome back', style: GoogleFonts.inter(color: textPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
+        Text('Sign in to your account', style: GoogleFonts.inter(color: textMuted, fontSize: 13)),
         const SizedBox(height: 24),
-
-        _buildField(
-          context: context,
-          controller: _signInEmailController,
-          label: 'Email Address',
-          hint: 'john@example.com',
-          icon: Icons.email_rounded,
-          keyboardType: TextInputType.emailAddress,
-        ),
+        _buildField(context: context, controller: _signInEmailController, label: 'Email Address', hint: 'john@example.com', icon: Icons.email_rounded, keyboardType: TextInputType.emailAddress),
         const SizedBox(height: 16),
-        _buildField(
-          context: context,
-          controller: _signInPasswordController,
-          label: 'Password',
-          hint: '••••••••••',
-          icon: Icons.lock_rounded,
-          isPassword: true,
-          showPassword: _showSignInPass,
-          onTogglePassword: () =>
-              setState(() => _showSignInPass = !_showSignInPass),
-        ),
-
-        if (_error.isNotEmpty && _tabIndex == 0) ...[
-          const SizedBox(height: 12),
-          _errorBanner(_error),
-        ],
-        if (_success.isNotEmpty && _tabIndex == 0) ...[
-          const SizedBox(height: 12),
-          _successBanner(_success),
-        ],
-
+        _buildField(context: context, controller: _signInPasswordController, label: 'Password', hint: '••••••••••', icon: Icons.lock_rounded, isPassword: true, showPassword: _showSignInPass, onTogglePassword: () => setState(() => _showSignInPass = !_showSignInPass)),
+        if (_error.isNotEmpty && _tabIndex == 0) ...[const SizedBox(height: 12), _errorBanner(_error)],
+        if (_success.isNotEmpty && _tabIndex == 0) ...[const SizedBox(height: 12), _successBanner(_success)],
         const SizedBox(height: 24),
-        _submitButton(
-          context: context,
-          label: 'Sign In',
-          onTap: _login,
-        ),
+        _submitButton(context: context, label: 'Sign In', onTap: _login),
         const SizedBox(height: 16),
         Center(
           child: GestureDetector(
             onTap: () => _switchTab(1),
-            child: RichText(
-              text: TextSpan(
-                text: "Don't have an account? ",
-                style: GoogleFonts.inter(
-                    color: textMuted, fontSize: 13),
-                children: [
-                  TextSpan(
-                    text: 'Sign Up',
-                    style: GoogleFonts.inter(
-                      color: AppColors.accent,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            child: RichText(text: TextSpan(
+              text: "Don't have an account? ",
+              style: GoogleFonts.inter(color: textMuted, fontSize: 13),
+              children: [TextSpan(text: 'Sign Up', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold))],
+            )),
           ),
         ),
       ],
     );
   }
 
-  // ── Sign Up form ──────────────────────────────
   Widget _buildSignUpForm(BuildContext context) {
     final textPrimary = AppTheme.textPrimary(context);
     final textMuted   = AppTheme.textMuted(context);
@@ -665,85 +461,25 @@ class _LoginScreenState extends State<LoginScreen>
       key: const ValueKey('signup'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Create account',
-            style: GoogleFonts.inter(
-                color: textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.bold)),
-        Text('Fill in your details to get started',
-            style: GoogleFonts.inter(
-                color: textMuted, fontSize: 13)),
-
+        Text('Create account', style: GoogleFonts.inter(color: textPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
+        Text('Fill in your details to get started', style: GoogleFonts.inter(color: textMuted, fontSize: 13)),
         const SizedBox(height: 24),
-
-        _buildField(
-          context: context,
-          controller: _usernameController,
-          label: 'Username',
-          hint: 'johndoe',
-          icon: Icons.person_rounded,
-        ),
+        _buildField(context: context, controller: _usernameController, label: 'Username', hint: 'johndoe', icon: Icons.person_rounded),
         const SizedBox(height: 16),
-        _buildField(
-          context: context,
-          controller: _emailController,
-          label: 'Email Address',
-          hint: 'john@example.com',
-          icon: Icons.email_rounded,
-          keyboardType: TextInputType.emailAddress,
-        ),
+        _buildField(context: context, controller: _emailController, label: 'Email Address', hint: 'john@example.com', icon: Icons.email_rounded, keyboardType: TextInputType.emailAddress),
         const SizedBox(height: 16),
-        _buildField(
-          context: context,
-          controller: _signUpPasswordController,
-          label: 'Password',
-          hint: '••••••••••',
-          icon: Icons.lock_rounded,
-          isPassword: true,
-          showPassword: _showSignUpPass,
-          onTogglePassword: () =>
-              setState(() => _showSignUpPass = !_showSignUpPass),
-        ),
-
-        if (_error.isNotEmpty && _tabIndex == 1) ...[
-          const SizedBox(height: 12),
-          _errorBanner(_error),
-        ],
-        if (_success.isNotEmpty && _tabIndex == 1) ...[
-          const SizedBox(height: 12),
-          _successBanner(_success),
-        ],
-
+        _buildField(context: context, controller: _signUpPasswordController, label: 'Password', hint: '••••••••••', icon: Icons.lock_rounded, isPassword: true, showPassword: _showSignUpPass, onTogglePassword: () => setState(() => _showSignUpPass = !_showSignUpPass)),
+        if (_error.isNotEmpty && _tabIndex == 1) ...[const SizedBox(height: 12), _errorBanner(_error)],
+        if (_success.isNotEmpty && _tabIndex == 1) ...[const SizedBox(height: 12), _successBanner(_success)],
         const SizedBox(height: 24),
-        _submitButton(
-          context: context,
-          label: 'Create Account',
-          onTap: _signUp,
-        ),
+        _submitButton(context: context, label: 'Create Account', onTap: _signUp),
         const SizedBox(height: 16),
-
-        // Divider
         Row(children: [
-          Expanded(
-              child: Divider(
-                  color: AppTheme.glassBorder(context),
-                  thickness: 1)),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text('or',
-                style: TextStyle(
-                    color: AppTheme.textMuted(context),
-                    fontSize: 13)),
-          ),
-          Expanded(
-              child: Divider(
-                  color: AppTheme.glassBorder(context),
-                  thickness: 1)),
+          Expanded(child: Divider(color: AppTheme.glassBorder(context), thickness: 1)),
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text('or', style: TextStyle(color: AppTheme.textMuted(context), fontSize: 13))),
+          Expanded(child: Divider(color: AppTheme.glassBorder(context), thickness: 1)),
         ]),
-
         const SizedBox(height: 16),
-
-        // Sign up with Email button
         GestureDetector(
           onTap: _isLoading ? null : _signUpWithEmail,
           child: Container(
@@ -752,93 +488,46 @@ class _LoginScreenState extends State<LoginScreen>
             decoration: BoxDecoration(
               color: AppTheme.glassWhite(context),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                  color: AppColors.accent.withValues(alpha: 0.5)),
+              border: Border.all(color: AppColors.accent.withValues(alpha: 0.5)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.email_rounded,
-                    color: AppColors.accent, size: 20),
-                const SizedBox(width: 10),
-                Text('Sign up with Email',
-                    style: GoogleFonts.inter(
-                      color: AppColors.accent,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    )),
-              ],
-            ),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.email_rounded, color: AppColors.accent, size: 20),
+              const SizedBox(width: 10),
+              Text('Sign up with Email', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 15, fontWeight: FontWeight.w600)),
+            ]),
           ),
         ),
-
         const SizedBox(height: 16),
         Center(
           child: GestureDetector(
             onTap: () => _switchTab(0),
-            child: RichText(
-              text: TextSpan(
-                text: 'Already have an account? ',
-                style: GoogleFonts.inter(
-                    color: textMuted, fontSize: 13),
-                children: [
-                  TextSpan(
-                    text: 'Sign In',
-                    style: GoogleFonts.inter(
-                      color: AppColors.accent,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            child: RichText(text: TextSpan(
+              text: 'Already have an account? ',
+              style: GoogleFonts.inter(color: textMuted, fontSize: 13),
+              children: [TextSpan(text: 'Sign In', style: GoogleFonts.inter(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold))],
+            )),
           ),
         ),
       ],
     );
   }
 
-  // ── Shared widgets ────────────────────────────
-  Widget _submitButton({
-    required BuildContext context,
-    required String label,
-    required VoidCallback onTap,
-  }) {
+  Widget _submitButton({required BuildContext context, required String label, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: _isLoading ? null : onTap,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          gradient: _isLoading
-              ? null
-              : const LinearGradient(
-                  colors: AppColors.primaryGradient),
+          gradient: _isLoading ? null : const LinearGradient(colors: AppColors.primaryGradient),
           color: _isLoading ? AppTheme.cardBorder(context) : null,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: _isLoading
-              ? null
-              : [
-                  BoxShadow(
-                    color: AppColors.accent.withValues(alpha: 0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+          boxShadow: _isLoading ? null : [BoxShadow(color: AppColors.accent.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 4))],
         ),
         child: Center(
           child: _isLoading
-              ? const SizedBox(
-                  width: 20, height: 20,
-                  child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2))
-              : Text(label,
-                  style: GoogleFonts.inter(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  )),
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : Text(label, style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
         ),
       ),
     );
@@ -847,19 +536,11 @@ class _LoginScreenState extends State<LoginScreen>
   Widget _errorBanner(String message) {
     return Container(
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppColors.criticalGlow,
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: AppColors.criticalGlow, borderRadius: BorderRadius.circular(10)),
       child: Row(children: [
-        const Icon(Icons.error_rounded,
-            color: AppColors.critical, size: 16),
+        const Icon(Icons.error_rounded, color: AppColors.critical, size: 16),
         const SizedBox(width: 8),
-        Expanded(
-          child: Text(message,
-              style: const TextStyle(
-                  color: AppColors.critical, fontSize: 13)),
-        ),
+        Expanded(child: Text(message, style: const TextStyle(color: AppColors.critical, fontSize: 13))),
       ]),
     );
   }
@@ -867,19 +548,11 @@ class _LoginScreenState extends State<LoginScreen>
   Widget _successBanner(String message) {
     return Container(
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppColors.successGlow,
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: AppColors.successGlow, borderRadius: BorderRadius.circular(10)),
       child: Row(children: [
-        const Icon(Icons.check_circle_rounded,
-            color: AppColors.success, size: 16),
+        const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 16),
         const SizedBox(width: 8),
-        Expanded(
-          child: Text(message,
-              style: const TextStyle(
-                  color: AppColors.success, fontSize: 13)),
-        ),
+        Expanded(child: Text(message, style: const TextStyle(color: AppColors.success, fontSize: 13))),
       ]),
     );
   }
@@ -902,42 +575,32 @@ class _LoginScreenState extends State<LoginScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(color: textSecondary, fontSize: 13)),
+        Text(label, style: TextStyle(color: textSecondary, fontSize: 13)),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
             color: AppTheme.glassWhite(context),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: AppTheme.glassBorder(context)),
+            border: Border.all(color: AppTheme.glassBorder(context)),
           ),
           child: TextField(
             controller: controller,
             obscureText: isPassword && !showPassword,
             keyboardType: keyboardType,
             style: TextStyle(color: textColor, fontSize: 14),
-            onSubmitted: (_) =>
-                _tabIndex == 0 ? _login() : _signUp(),
+            onSubmitted: (_) => _tabIndex == 0 ? _login() : _signUp(),
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: TextStyle(color: textMuted, fontSize: 14),
-              prefixIcon: Icon(icon,
-                  color: AppColors.accent, size: 20),
+              prefixIcon: Icon(icon, color: AppColors.accent, size: 20),
               suffixIcon: isPassword
                   ? IconButton(
-                      icon: Icon(
-                        showPassword
-                            ? Icons.visibility_off_rounded
-                            : Icons.visibility_rounded,
-                        color: textMuted, size: 20,
-                      ),
+                      icon: Icon(showPassword ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: textMuted, size: 20),
                       onPressed: onTogglePassword,
                     )
                   : null,
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
           ),
         ),

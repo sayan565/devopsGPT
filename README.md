@@ -17,20 +17,22 @@ graph TD
     B --> C[list_servers Lambda]
     B --> D[alert_processor Lambda]
     B --> E[ai_analyzer Lambda]
-    B --> F[fix_executor Lambda]
+    B --> F[auto_healer Lambda]
     B --> G[tenant_onboarding Lambda]
     C --> H[(DynamoDB\ndevopsgpt-dev-tenants)]
     D --> H
-    E --> I[AWS Bedrock\nClaude / GPT-4o-mini]
-    E --> H
-    F --> J[EC2 / ECS / ASG]
+    E --> I[OpenRouter API\ngpt-4o-mini / Claude]
+    E --> J[(DynamoDB\nChat History)]
+    F --> K[EC2 / SSM]
     G --> H
-    K[EventBridge\nevery 1 min] --> L[cloudwatch_poller Lambda]
-    M[EventBridge\nevery 5 min] --> N[data_collector Lambda]
-    L --> O[(DynamoDB\nAlerts Table)]
-    N --> P[(DynamoDB\nMetrics Table)]
-    L -->|CRITICAL| Q[SNS Topic]
-    Q -->|Email| R[On-Call Engineer]
+    L[EventBridge\nevery 1 min] --> M[cloudwatch_poller Lambda]
+    N[EventBridge\nevery 5 min] --> O[data_collector Lambda]
+    M --> P[(DynamoDB\nAlerts Table)]
+    O --> Q[(DynamoDB\nMetrics Table)]
+    M -->|CRITICAL| R[SNS Topic]
+    R -->|Email| S[On-Call Engineer]
+    T[WebSocket API] --> U[websocket_handler Lambda]
+    U --> V[(DynamoDB\nWS Connections)]
 ```
 
 ---
@@ -111,8 +113,8 @@ flutter run \
 | `API_BASE_URL` | ✅ | API Gateway base URL |
 | `WS_URL` | ❌ | WebSocket API URL (disabled by default) |
 | `FIREBASE_API_KEY` | ✅ | Firebase project API key |
-| `OPENROUTER_API_KEY` | ✅ | OpenRouter API key for AI chat |
-| `BEDROCK_MODEL_ID` | ❌ | Bedrock model ID (default: claude-sonnet) |
+| `OPENROUTER_API_KEY` | ✅ | OpenRouter API key — set on Lambda env var |
+| `OPENROUTER_MODEL` | ❌ | AI model (default: `openai/gpt-4o-mini`) |
 
 ---
 
@@ -197,19 +199,19 @@ WebSocket real-time streaming is implemented in `frontend/lib/services/websocket
 Each tenant has an IAM role in their own AWS account. DevOpsGPT assumes this role via STS `AssumeRole` with an `ExternalId` (the tenant UUID) for security. The role ARN is stored in DynamoDB and looked up per request — no hardcoded credentials.
 
 ### AI Provider
-The AI chat uses OpenRouter (configurable model) for conversational queries and AWS Bedrock Claude for deep infrastructure analysis. Both are configurable via environment variables.
+The AI chat uses **OpenRouter API** (currently `gpt-4o-mini`, configurable via `OPENROUTER_MODEL` env var) for all conversational queries and root cause analysis. OpenRouter provides model flexibility — the model can be switched to Claude, Llama, or any other supported model without code changes. The `OPENROUTER_API_KEY` is injected via Lambda environment variable.
 
 ---
 
 ## Future Roadmap
 
 See [FUTURE_ROADMAP.md](FUTURE_ROADMAP.md) for the full 6-item roadmap including:
-- FS1: Predictive AI Failure Analysis (SageMaker)
-- FS2: Auto-Scaling Automation
-- FS3: Real-Time WebSocket Streaming
+- FS1: Predictive AI Failure Analysis (CloudWatch Anomaly Detection)
+- FS2: Auto-Healing Confidence Scoring
+- FS3: Extended WebSocket Timeseries Streaming
 - FS4: Multi-Cloud Support (GCP, Azure)
 - FS5: Role-Based Access Control
-- FS6: AI Conversation Memory
+- FS6: AI Conversation Memory (partially delivered)
 
 ---
 

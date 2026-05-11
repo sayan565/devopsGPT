@@ -33,14 +33,18 @@ def handler(event, context):
             for alarm in page["MetricAlarms"]:
                 state = alarm["StateValue"]
                 item = {
-                    "id": alarm["AlarmArn"],
-                    "name": alarm["AlarmName"],
-                    "state": state,             # OK | ALARM | INSUFFICIENT_DATA
-                    "description": alarm.get("AlarmDescription", ""),
-                    "metric": alarm.get("MetricName", ""),
-                    "namespace": alarm.get("Namespace", ""),
-                    "threshold": alarm.get("Threshold", 0),
-                    "updated_at": str(alarm.get("StateUpdatedTimestamp", "")),
+                    "id":          alarm["AlarmArn"],
+                    "alert_id":    alarm["AlarmArn"],
+                    "name":        alarm["AlarmName"],
+                    # Flutter reads 'message' and 'severity' — map them here
+                    "message":     alarm.get("AlarmDescription") or alarm["AlarmName"],
+                    "severity":    _state_to_severity(state),
+                    "serverId":    _extract_instance_id(alarm),
+                    "state":       state,
+                    "metric":      alarm.get("MetricName", ""),
+                    "namespace":   alarm.get("Namespace", ""),
+                    "threshold":   alarm.get("Threshold", 0),
+                    "updated_at":  str(alarm.get("StateUpdatedTimestamp", "")),
                 }
                 alarms.append(item)
 
@@ -92,3 +96,20 @@ def _get_tenant_id(event) -> str | None:
              .get("claims", {})
     )
     return claims.get("custom:tenant_id")
+
+
+def _state_to_severity(state: str) -> str:
+    """Map CloudWatch alarm state to DevOpsGPT severity level."""
+    return {
+        "ALARM":              "HIGH",
+        "INSUFFICIENT_DATA":  "MEDIUM",
+        "OK":                 "LOW",
+    }.get(state, "LOW")
+
+
+def _extract_instance_id(alarm: dict) -> str:
+    """Extract EC2 instance ID from alarm dimensions if present."""
+    for dim in alarm.get("Dimensions", []):
+        if dim.get("Name") == "InstanceId":
+            return dim.get("Value", "N/A")
+    return "N/A"

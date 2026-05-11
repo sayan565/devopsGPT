@@ -1,7 +1,8 @@
 # DevOpsGPT — Future Roadmap
 
-This document outlines the planned feature enhancements for DevOpsGPT beyond the MVP release.
-Each item references the existing codebase foundation it builds upon.
+This document outlines planned enhancements beyond the current MVP.
+Each item references the existing codebase it builds upon and is honest
+about what is already delivered vs. what remains to be built.
 
 ---
 
@@ -12,65 +13,89 @@ Each item references the existing codebase foundation it builds upon.
 
 ### Current Foundation
 - `frontend/lib/widgets/server_chart_widget.dart` — renders real-time CPU/Memory charts
-- `backend/lambdas/data_collector/handler.py` — collects 5-minute metric snapshots to DynamoDB
-- `backend/lambdas/ai_analysis/handler.py` — Bedrock integration for root cause analysis
+- `backend/lambdas/data_collector/handler.py` — collects 5-minute metric snapshots to DynamoDB MetricsTable
+- `backend/lambdas/ai_analyzer/handler.py` — OpenRouter AI integration for root cause analysis
+
+### What's Missing
+The current system only alerts *after* a threshold is breached. There is no
+predictive capability to warn before a breach occurs.
 
 ### Next Implementation Step
-1. Accumulate 30 days of metric history in `MetricsTable` (already TTL-configured for 7 days — extend to 30)
-2. Export metric history to S3 in CSV format via a new `ml_exporter` Lambda
-3. Train AWS SageMaker Autopilot model on the exported dataset
-4. Deploy SageMaker endpoint and call it from `ai_analysis` Lambda before Bedrock analysis
-5. Add `predictionScore` and `predictedFailureTime` fields to the AI response
-6. Display prediction confidence in `server_chart_widget.dart` as a trend overlay
+1. Enable **CloudWatch Anomaly Detection** on the `CPUUtilization` and
+   `mem_used_percent` metrics — this uses ML-based band detection with zero
+   SageMaker setup required
+2. Add an `ANOMALY_DETECTION` alarm type to `cloudwatch_poller/handler.py`
+   that fires when the metric exits the expected band, 15–30 minutes before
+   a hard threshold breach
+3. Surface the anomaly score in `server_chart_widget.dart` as a shaded
+   confidence band on the existing line chart
+4. Alternatively, enable **Amazon Lookout for Metrics** on the MetricsTable
+   data stream for threshold-free anomaly detection across all metric dimensions
 
 ### Estimated Sprint Effort
-**3 sprints (6 weeks):** 1 sprint for data pipeline, 1 for SageMaker training, 1 for UI integration
+**2 sprints (4 weeks):** 1 sprint for CloudWatch Anomaly Detection wiring,
+1 sprint for UI confidence band overlay
 
 ---
 
-## FS2 — Auto-Scaling Automation
+## FS2 — Auto-Healing Confidence Scoring
 
 **Priority:** HIGH  
-**Status:** Planned — Sprint 4
+**Status:** Partially delivered — Sprint 4
 
 ### Current Foundation
-- `backend/lambdas/fix_executor/handler.py` — `SCALE_UP` fix type already implemented
+- `backend/lambdas/auto_healer/handler.py` — executes healing actions (restart, scale-up)
+- `backend/lambdas/ai_analyzer/handler.py` — returns AI analysis but **no confidence score yet**
 - `infrastructure/terraform/eventbridge.tf` — EventBridge rules for scheduled triggers
-- `infrastructure/terraform/iam.tf` — `autoscaling:SetDesiredCapacity` permission already granted
+
+### What's Missing
+The `auto_healer` Lambda exists and can execute fixes, but there is currently
+no confidence scoring in the AI response. The >95% auto-trigger threshold
+described below is the next step to implement.
 
 ### Next Implementation Step
-1. Add `confidence` field to `ai_analysis` response (already in Bedrock prompt)
-2. Create `auto_executor` Lambda that reads from `FixHistoryTable` and checks confidence score
-3. If `confidence >= 95%` and `riskLevel == LOW`, auto-execute the fix without human approval
-4. Add `requiresHumanReview: false` path in `fix_executor` for auto-approved fixes
-5. Send pre-execution notification via SNS with 5-minute cancellation window
-6. Log all auto-executions to `FixHistoryTable` with `autoExecuted: true` flag
+1. Add a `confidence` field (0–100) to the `ai_analyzer` Lambda response,
+   derived from the AI model's certainty about the root cause
+2. Create an `auto_executor` Lambda that reads new entries from `FixHistoryTable`
+   and checks `confidence >= 95` before calling `auto_healer`
+3. For confidence < 95, send an SNS notification requiring human approval
+4. Log all auto-executions with `autoExecuted: true` flag in `FixHistoryTable`
 
 ### Estimated Sprint Effort
 **2 sprints (4 weeks):** 1 sprint for confidence scoring, 1 for auto-execution pipeline
 
 ---
 
-## FS3 — Real-Time WebSocket Streaming
+## FS3 — Extended Real-Time WebSocket Streaming
 
 **Priority:** MEDIUM  
-**Status:** Feature-flagged — foundation complete
+**Status:** Foundation delivered — Sprint 1 extension
 
-### Current Foundation
-- `frontend/lib/services/websocket_service.dart` — fully implemented, gated behind `WEBSOCKET_ENABLED = false`
-- `backend/lambdas/websocket_handler/handler.py` — WebSocket connect/disconnect/message handler
-- `infrastructure/terraform/api_gateway.tf` — API Gateway REST API (WebSocket API to be added)
+### Already Delivered
+WebSocket infrastructure is **fully built and deployed**:
+- `frontend/lib/services/websocket_service.dart` — WebSocket client (feature-flagged, `WEBSOCKET_ENABLED = false`)
+- `backend/lambdas/websocket_handler/handler.py` — connect/disconnect/message handler
+- DynamoDB `devopsgpt-dev-ws_conns` table — active connection registry
+- API Gateway WebSocket endpoint: `wss://x5l8w1wmtl.execute-api.us-east-1.amazonaws.com/dev`
+
+The feature is currently disabled in the Flutter app (`WEBSOCKET_ENABLED = false`)
+pending the extension below.
+
+### What's Missing
+The current WebSocket only pushes alert notifications. The extension is to
+push **live CPU/memory timeseries graph data** so `server_chart_widget.dart`
+updates in real time without polling.
 
 ### Next Implementation Step
-1. Add `aws_apigatewayv2_api` WebSocket resource to `api_gateway.tf`
-2. Create connection manager Lambda that stores `connectionId` in `devopsgpt-dev-ws_conns` table
-3. Modify `data_collector` Lambda to broadcast metrics to all active WebSocket connections
-4. Set `WEBSOCKET_ENABLED = true` in `websocket_service.dart`
-5. Update `WebSocketConfig.url` default to the new WebSocket API endpoint
-6. Remove REST polling fallback from `dashboard_screen.dart`
+1. Modify `data_collector/handler.py` to broadcast metric snapshots to all
+   active WebSocket connections after each 5-minute collection cycle
+2. Update `websocket_service.dart` to parse `metrics_update` payloads and
+   feed them directly into `server_chart_widget.dart`'s data stream
+3. Set `WEBSOCKET_ENABLED = true` and remove the REST polling fallback
+   from `dashboard_screen.dart`
 
 ### Estimated Sprint Effort
-**2 sprints (4 weeks):** 1 sprint for backend WebSocket API, 1 for Flutter integration
+**1 sprint (2 weeks):** backend broadcast + Flutter chart integration
 
 ---
 
@@ -81,17 +106,15 @@ Each item references the existing codebase foundation it builds upon.
 
 ### Current Foundation
 - `frontend/lib/services/api_service.dart` — abstracted HTTP layer with `ApiConfig.baseUrl`
-- `backend/lambdas/list_servers/handler.py` — EC2-specific but abstracted via `get_client()`
+- `backend/lambdas/list_servers/handler.py` — EC2-specific but uses `get_client()` factory
 - `backend/lambdas/shared/aws_clients.py` — client factory pattern ready for extension
 
 ### Next Implementation Step
 1. Define abstract `MetricCollector` interface in `backend/lambdas/shared/collector_interface.py`
-2. Implement `AwsMetricCollector` (existing) and `GcpMetricCollector` (new) classes
-3. Add `cloudProvider` field to `ServersTable` and tenant registration
-4. Create GCP Cloud Monitoring adapter using `google-cloud-monitoring` Python SDK
-5. Add Azure Monitor adapter using `azure-monitor-query` SDK
-6. Update `aws_connect_screen.dart` to support GCP/Azure credential input
-7. Add provider-specific CloudFormation/Deployment Manager templates
+2. Implement `GcpMetricCollector` using `google-cloud-monitoring` Python SDK
+3. Implement `AzureMetricCollector` using `azure-monitor-query` SDK
+4. Add `cloudProvider` field to `ServersTable` and tenant registration
+5. Update `aws_connect_screen.dart` to support GCP/Azure credential input
 
 ### Estimated Sprint Effort
 **4 sprints (8 weeks):** 1 per cloud provider + 1 for UI/UX
@@ -106,51 +129,67 @@ Each item references the existing codebase foundation it builds upon.
 ### Current Foundation
 - `frontend/lib/screens/auth/login_screen.dart` — Firebase Auth with email/password
 - `backend/lambdas/tenant_onboarding/handler.py` — tenant registration with `uid` field
-- `backend/lambdas/shared/aws_clients.py` — all Lambda calls already pass `tenant_id`
+- Tenant isolation is already enforced via **STS AssumeRole + ExternalId** per tenant —
+  this is the existing security boundary
+
+### What's Missing
+All authenticated users within a tenant currently have the same access level.
+There is no distinction between read-only analysts and admins who can trigger fixes.
 
 ### Next Implementation Step
-1. Define roles: `ADMIN`, `OPERATOR`, `VIEWER` in Firebase custom claims
-2. Set custom claims via Firebase Admin SDK in `tenant_onboarding` Lambda after registration
-3. Create API Gateway Lambda authorizer that validates JWT claims and role
-4. Add role check middleware to `fix_executor` (only `ADMIN`/`OPERATOR` can execute fixes)
-5. Update Flutter app to read role from Firebase ID token and hide/show UI elements
-6. Add role management screen in settings for `ADMIN` users
+1. Add Firebase custom claims (`role: ADMIN | OPERATOR | VIEWER`) via Firebase
+   Admin SDK in the `tenant_onboarding` Lambda after registration
+2. Read the role from the Firebase ID token in the Flutter app and conditionally
+   show/hide the "Fix" and "Scale Up" buttons based on role
+3. Add a Lambda authorizer to API Gateway that validates the JWT role claim
+   before allowing `POST /fix` and `POST /fix-execute` calls
+4. This builds on top of the existing STS-based tenant isolation — RBAC adds
+   per-user permission layers within each tenant
 
 ### Estimated Sprint Effort
-**2 sprints (4 weeks):** 1 sprint for backend authorizer, 1 for Flutter RBAC UI
+**2 sprints (4 weeks):** 1 sprint for Firebase claims + Lambda authorizer,
+1 sprint for Flutter role-aware UI
 
 ---
 
-## FS6 — AI Conversation Memory
+## FS6 — AI Conversation Memory (Multi-Turn Context)
 
 **Priority:** LOW  
-**Status:** Planned — Sprint 5
+**Status:** Partially delivered — Sprint 5
 
-### Current Foundation
-- `frontend/lib/screens/ai/ai_chat_screen.dart` — full chat UI with conversation history in memory
-- `backend/lambdas/ai_analyzer/handler.py` — `_save_chat()` already writes to `devopsgpt-dev-chat`
-- `frontend/lib/services/api_service.dart` — `sendAiMessageWithHistory()` passes history array
+### Already Delivered
+- `frontend/lib/screens/ai/ai_chat_screen.dart` — full chat UI, passes `history` array
+  to `sendAiMessageWithHistory()` on every message
+- `backend/lambdas/ai_analyzer/handler.py` — **conversation history is now wired**:
+  the last 10 messages from DynamoDB are loaded and passed as context into every
+  OpenRouter API call, enabling coherent multi-turn analysis
+- DynamoDB `devopsgpt-dev-chat` table — persists every question/answer pair with
+  `session_id` + `tenant_id` + TTL
+
+### What's Missing
+Session management UI — users cannot yet browse past sessions or resume a
+previous conversation by `session_id`.
 
 ### Next Implementation Step
-1. Load conversation history from `devopsgpt-dev-chat` DynamoDB table on chat screen open
-2. Add `GET /chat-history?tenant_id=&session_id=` API endpoint backed by new Lambda
-3. Implement sliding context window: keep last 20 messages to stay within Bedrock token limit
-4. Add session management: list past sessions, resume any session by `session_id`
-5. Add "Clear conversation" button that archives (not deletes) the session in DynamoDB
-6. Implement semantic search over past conversations using Bedrock embeddings + DynamoDB
+1. Add `GET /chat-history?tenant_id=&session_id=` API endpoint backed by a
+   new `chat_history` Lambda that queries the DynamoDB chat table
+2. Add a session list drawer in `ai_chat_screen.dart` showing past sessions
+3. Implement semantic search over past conversations using Bedrock embeddings
+   for "find similar past incidents" functionality
 
 ### Estimated Sprint Effort
-**2 sprints (4 weeks):** 1 sprint for persistence API, 1 for Flutter session management UI
+**2 sprints (4 weeks):** 1 sprint for history API + session UI,
+1 sprint for semantic search
 
 ---
 
 ## Summary Table
 
-| ID  | Feature                      | Priority | Sprint | Foundation File |
-|-----|------------------------------|----------|--------|-----------------|
-| FS1 | Predictive AI Failure Analysis | HIGH   | 3      | `server_chart_widget.dart` |
-| FS2 | Auto-Scaling Automation       | HIGH    | 4      | `fix_executor/handler.py` |
-| FS3 | Real-Time WebSocket Streaming | MEDIUM  | 1      | `websocket_service.dart` |
-| FS4 | Multi-Cloud Support           | MEDIUM  | 6      | `api_service.dart` |
-| FS5 | Role-Based Access Control     | HIGH    | 2      | `login_screen.dart` |
-| FS6 | AI Conversation Memory        | LOW     | 5      | `ai_chat_screen.dart` |
+| ID  | Feature                          | Priority | Sprint | Status |
+|-----|----------------------------------|----------|--------|--------|
+| FS1 | Predictive AI (CloudWatch Anomaly Detection) | HIGH | 3 | Planned |
+| FS2 | Auto-Healing Confidence Scoring  | HIGH     | 4      | Partial |
+| FS3 | Extended WebSocket Timeseries    | MEDIUM   | 1 ext  | Foundation delivered |
+| FS4 | Multi-Cloud Support              | MEDIUM   | 6      | Planned |
+| FS5 | Role-Based Access Control        | HIGH     | 2      | Planned |
+| FS6 | AI Conversation Memory           | LOW      | 5      | Partial |

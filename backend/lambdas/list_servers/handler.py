@@ -20,8 +20,8 @@ def handler(event, context):
         tenant_id = _get_tenant_id(event)
         role_arn = get_tenant_role(tenant_id) if tenant_id else None
 
-        ec2 = get_client("ec2", role_arn)
-        cw = get_client("cloudwatch", role_arn)
+        ec2 = get_client("ec2", role_arn, tenant_id=tenant_id)
+        cw  = get_client("cloudwatch", role_arn, tenant_id=tenant_id)
 
         # Auto-discover all running/stopped EC2 instances
         paginator = ec2.get_paginator("describe_instances")

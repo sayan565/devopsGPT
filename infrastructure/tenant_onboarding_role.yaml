@@ -27,7 +27,7 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${DevOpsGPTMasterAccountId}:root'
+              AWS: !Sub 'arn:aws:iam::${DevOpsGPTMasterAccountId}:role/devopsgpt-dev-lambda-role'
             Action: sts:AssumeRole
             Condition:
               StringEquals:

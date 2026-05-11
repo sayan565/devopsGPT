@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 class WebSocketConfig {
   static const url = String.fromEnvironment(
     'WS_URL',
-    defaultValue: 'wss://REPLACE_ME.execute-api.us-east-1.amazonaws.com/prod',
+    defaultValue: 'wss://x5l8w1wmtl.execute-api.us-east-1.amazonaws.com/dev',
   );
 }
 

@@ -23,7 +23,7 @@ def handler(event, context):
         tenant_id = _get_tenant_id(event)
         role_arn = get_tenant_role(tenant_id) if tenant_id else None
 
-        cw = get_client("cloudwatch", role_arn)
+        cw       = get_client("cloudwatch", role_arn, tenant_id=tenant_id)
         dynamodb = get_client("dynamodb")  # always master account
 
         alarms = []

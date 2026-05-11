@@ -24,10 +24,9 @@ LOG_LIMIT = int(os.environ.get("LOG_LIMIT", "100"))
 def handler(event, context):
     try:
         tenant_id = _get_tenant_id(event)
-        role_arn = get_tenant_role(tenant_id) if tenant_id else None
-        qs = event.get("queryStringParameters") or {}
-
-        logs_client = get_client("logs", role_arn)
+        role_arn    = get_tenant_role(tenant_id) if tenant_id else None
+        qs          = event.get("queryStringParameters") or {}
+        logs_client = get_client("logs", role_arn, tenant_id=tenant_id)
 
         # List available log groups
         log_groups = _list_log_groups(logs_client, qs.get("prefix", ""))

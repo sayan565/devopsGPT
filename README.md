@@ -9,6 +9,16 @@ DevOpsGPT is a multi-tenant SaaS platform that monitors AWS infrastructure in re
 
 ---
 
+## Screenshots
+
+| Dashboard | Alerts | AI Assistant | Logs |
+|:---------:|:------:|:------------:|:----:|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Alerts](docs/screenshots/alerts.png) | ![AI Chat](docs/screenshots/ai_chat.png) | ![Logs](docs/screenshots/logs.png) |
+
+> Real-time EC2 monitoring · Severity-filtered alerts · Voice-enabled AI chat · CloudWatch log viewer
+
+---
+
 ## Architecture
 
 ```mermaid

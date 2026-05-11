@@ -5,7 +5,6 @@ import '../../core/theme/app_colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/animated_background.dart';
 import '../../services/api_service.dart';
-import 'aws_connect_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

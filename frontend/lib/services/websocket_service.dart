@@ -22,6 +22,7 @@ class WebSocketConfig {
 class WebSocketService {
   /// Feature flag — set to `true` to enable WebSocket connectivity.
   /// Currently disabled: WebSocket is out of scope for the MVP.
+  // ignore: constant_identifier_names
   static const bool WEBSOCKET_ENABLED = false;
 
   static final WebSocketService _instance = WebSocketService._internal();

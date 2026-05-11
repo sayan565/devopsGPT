@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:mockito/annotations.dart';
 
 // NOTE: These tests use http.MockClient from the http/testing package.
 // Run: flutter test test/services/api_service_test.dart
@@ -11,7 +10,7 @@ import 'package:mockito/annotations.dart';
 void main() {
   group('ApiService — HTTP behaviour', () {
     // ── Helper: build a mock HTTP client ─────────────────────────────────────
-    http.Client _mockClient({
+    http.Client buildMockClient({
       required int statusCode,
       required Map<String, dynamic> body,
     }) {
@@ -26,7 +25,7 @@ void main() {
 
     // ── Test 1: successful alerts response ────────────────────────────────────
     test('fetchAlerts returns list when API returns 200', () async {
-      final client = _mockClient(
+      final client = buildMockClient(
         statusCode: 200,
         body: {
           'alerts': [
@@ -36,7 +35,6 @@ void main() {
         },
       );
 
-      // Simulate the GET /alerts call
       final response = await client.get(
         Uri.parse('https://api.example.com/dev/alerts'),
         headers: {'x-api-key': 'test-key'},
@@ -51,7 +49,7 @@ void main() {
 
     // ── Test 2: 401 Unauthorized ──────────────────────────────────────────────
     test('fetchAlerts returns 401 when API key is invalid', () async {
-      final client = _mockClient(
+      final client = buildMockClient(
         statusCode: 401,
         body: {'error': 'Unauthorized'},
       );
@@ -68,7 +66,7 @@ void main() {
 
     // ── Test 3: 500 Internal Server Error ─────────────────────────────────────
     test('fetchAlerts returns 500 on server error', () async {
-      final client = _mockClient(
+      final client = buildMockClient(
         statusCode: 500,
         body: {'error': 'Internal Server Error'},
       );
@@ -104,7 +102,7 @@ void main() {
 
     // ── Test 5: empty alerts list ─────────────────────────────────────────────
     test('fetchAlerts returns empty list when no alerts exist', () async {
-      final client = _mockClient(
+      final client = buildMockClient(
         statusCode: 200,
         body: {'alerts': [], 'count': 0},
       );
@@ -121,7 +119,7 @@ void main() {
 
     // ── Test 6: servers endpoint returns list ─────────────────────────────────
     test('getServers returns server list on 200', () async {
-      final client = _mockClient(
+      final client = buildMockClient(
         statusCode: 200,
         body: {
           'servers': [

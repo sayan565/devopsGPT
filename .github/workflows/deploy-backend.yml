@@ -1,0 +1,139 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+
+environment: production
+
+jobs:
+  # ── Deploy Terraform infrastructure ──────────────────────────────────────────
+  deploy-infrastructure:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            us-east-1
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.5.0'
+
+      - name: Terraform Init
+        run: terraform init
+        env:
+          TF_VAR_state_bucket: ${{ secrets.TF_STATE_BUCKET }}
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+  # ── Deploy Lambda functions ───────────────────────────────────────────────────
+  deploy-lambdas:
+    name: Deploy Lambdas
+    runs-on: ubuntu-latest
+    needs: deploy-infrastructure
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            us-east-1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Package and deploy cloudwatch_poller
+        run: |
+          cd backend/lambdas/cloudwatch_poller
+          pip install -r requirements.txt -t .
+          zip -r cloudwatch_poller.zip .
+          aws lambda update-function-code \
+            --function-name devopsgpt-dev-cloudwatch-poller \
+            --zip-file fileb://cloudwatch_poller.zip \
+            --region us-east-1
+
+      - name: Package and deploy ai_analysis
+        run: |
+          cd backend/lambdas/ai_analysis
+          pip install -r requirements.txt -t .
+          zip -r ai_analysis.zip .
+          aws lambda update-function-code \
+            --function-name devopsgpt-dev-ai-analysis \
+            --zip-file fileb://ai_analysis.zip \
+            --region us-east-1
+
+      - name: Package and deploy fix_executor
+        run: |
+          cd backend/lambdas/fix_executor
+          pip install -r requirements.txt -t .
+          zip -r fix_executor.zip .
+          aws lambda update-function-code \
+            --function-name devopsgpt-dev-fix-executor \
+            --zip-file fileb://fix_executor.zip \
+            --region us-east-1
+
+      - name: Package and deploy data_collector
+        run: |
+          cd backend/lambdas/data_collector
+          pip install -r requirements.txt -t .
+          zip -r data_collector.zip .
+          aws lambda update-function-code \
+            --function-name devopsgpt-dev-data-collector \
+            --zip-file fileb://data_collector.zip \
+            --region us-east-1
+
+  # ── Smoke tests ───────────────────────────────────────────────────────────────
+  smoke-tests:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: deploy-lambdas
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            us-east-1
+
+      - name: Test /servers endpoint
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "x-api-key: ${{ secrets.API_KEY }}" \
+            "${{ secrets.API_BASE_URL }}/servers")
+          echo "GET /servers → $STATUS"
+          [ "$STATUS" = "200" ] || exit 1
+
+      - name: Test /alerts endpoint
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "x-api-key: ${{ secrets.API_KEY }}" \
+            "${{ secrets.API_BASE_URL }}/alerts")
+          echo "GET /alerts → $STATUS"
+          [ "$STATUS" = "200" ] || exit 1
+
+      - name: Test /ai-analysis endpoint (POST)
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "x-api-key: ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"serverId":"smoke-test","metricType":"CPU","value":50}' \
+            "${{ secrets.API_BASE_URL }}/ai-analysis")
+          echo "POST /ai-analysis → $STATUS"
+          [ "$STATUS" = "200" ] || exit 1

@@ -1,159 +1,213 @@
-# DevOpsGPT — Multi-Tenant AI Cloud Monitoring & Auto-Healing Platform
+# DevOpsGPT — AI-Powered Cloud Operations Platform
 
-A production-grade SaaS platform that monitors AWS infrastructure across multiple
-customer accounts, performs AI-powered root cause analysis via Amazon Bedrock,
-and auto-heals incidents using SSM Run Command — all without storing customer
-access keys.
+DevOpsGPT is a multi-tenant SaaS platform that monitors AWS infrastructure in real time, uses AI to diagnose incidents, and executes automated fixes — all from a Flutter mobile app. It eliminates the need for engineers to manually triage CloudWatch alarms by providing instant root cause analysis and one-tap remediation.
 
 ---
 
 ## Architecture
 
-```
-Flutter App (mobile/web)
-        │  REST + WebSocket
-        ▼
-API Gateway (REST + WebSocket)
-        │
-        ▼
-Lambda Functions
-├── list_servers       → EC2 auto-discovery via describe_instances()
-├── alert_processor    → CloudWatch alarm ingestion → DynamoDB
-├── ai_analyzer        → Bedrock Claude root cause analysis
-├── auto_healer        → SSM Run Command healing actions
-├── metrics_streamer   → CloudWatch Logs reader
-├── websocket_handler  → Real-time dashboard push
-└── tenant_onboarding  → Cross-account IAM role registration
-        │
-        ▼
-DynamoDB (tenants / alerts / actions / chat / ws-connections)
-        │
-        ▼  (STS AssumeRole — no access keys stored)
-Customer AWS Accounts
-├── CloudWatch alarms & metrics
-├── EC2 instances
-└── SSM agents
-```
-
-## Repository Structure
-
-```
-devopsgpt/
-├── frontend/                  Flutter app
-│   ├── lib/services/          api_service.dart, websocket_service.dart
-│   └── test/                  Widget + unit tests
-├── backend/
-│   ├── lambdas/               One folder per Lambda function
-│   ├── shared/                aws_clients.py, response.py
-│   └── tests/                 pytest tests with moto mocks
-├── infrastructure/
-│   ├── main.tf                Root module
-│   ├── variables.tf / outputs.tf / providers.tf
-│   ├── modules/               lambda, api_gateway, websocket, dynamodb, iam, cloudwatch
-│   ├── environments/          dev.tfvars, prod.tfvars
-│   └── tenant_onboarding_role.yaml   CloudFormation for customer accounts
-├── .github/workflows/
-│   ├── terraform.yml          Plan on PR, Apply on merge
-│   ├── lambda-deploy.yml      Zip + deploy all Lambdas
-│   └── flutter.yml            Test + build APK
-└── docs/
-    └── DEPLOY.md              Step-by-step deploy guide
+```mermaid
+graph TD
+    A[Flutter App] -->|REST API + x-api-key| B[API Gateway]
+    B --> C[list_servers Lambda]
+    B --> D[alert_processor Lambda]
+    B --> E[ai_analyzer Lambda]
+    B --> F[fix_executor Lambda]
+    B --> G[tenant_onboarding Lambda]
+    C --> H[(DynamoDB\ndevopsgpt-dev-tenants)]
+    D --> H
+    E --> I[AWS Bedrock\nClaude / GPT-4o-mini]
+    E --> H
+    F --> J[EC2 / ECS / ASG]
+    G --> H
+    K[EventBridge\nevery 1 min] --> L[cloudwatch_poller Lambda]
+    M[EventBridge\nevery 5 min] --> N[data_collector Lambda]
+    L --> O[(DynamoDB\nAlerts Table)]
+    N --> P[(DynamoDB\nMetrics Table)]
+    L -->|CRITICAL| Q[SNS Topic]
+    Q -->|Email| R[On-Call Engineer]
 ```
 
 ---
 
-## Quick Start
+## Prerequisites
 
-### 1. Deploy infrastructure
+| Tool | Version | Install |
+|------|---------|---------|
+| Flutter SDK | 3.x | [flutter.dev](https://flutter.dev/docs/get-started/install) |
+| Dart SDK | 3.x | Included with Flutter |
+| AWS CLI | v2 | [aws.amazon.com/cli](https://aws.amazon.com/cli/) |
+| Terraform | 1.5+ | [terraform.io](https://www.terraform.io/downloads) |
+| Python | 3.11 | [python.org](https://www.python.org/downloads/) |
+
+---
+
+## Setup
+
+### 1. Clone and install Flutter dependencies
+
 ```bash
-cd infrastructure
+git clone https://github.com/sayan565/devopsGPT.git
+cd devopsGPT/frontend
+flutter pub get
+```
+
+### 2. Configure environment variables
+
+```bash
+cp .env.example .env
+# Edit .env and fill in your values
+```
+
+### 3. Deploy infrastructure with Terraform
+
+```bash
+cd infrastructure/terraform
 terraform init
-terraform apply -var-file=environments/dev/terraform.tfvars
+terraform plan
+terraform apply
 ```
 
-### 2. Get URLs + API key
+### 4. Deploy Lambda functions
+
 ```bash
-terraform output
-aws apigateway get-api-key --api-key $(terraform output -raw api_key_id) --include-value
+# Deploy all Lambda functions
+cd backend/lambdas
+
+for fn in list_servers alert_processor ai_analyzer fix_executor tenant_onboarding cloudwatch_poller data_collector; do
+  cd $fn
+  pip install -r requirements.txt -t . 2>/dev/null || true
+  zip -r ${fn}.zip .
+  aws lambda update-function-code \
+    --function-name devopsgpt-dev-${fn//_/-} \
+    --zip-file fileb://${fn}.zip \
+    --region us-east-1
+  cd ..
+done
 ```
 
-### 3. Run Flutter app locally
+### 5. Run the Flutter app
+
 ```bash
 cd frontend
 flutter run \
-  --dart-define=API_BASE_URL=https://xxxx.execute-api.us-east-1.amazonaws.com/dev \
-  --dart-define=API_KEY=your-key \
-  --dart-define=WS_URL=wss://yyyy.execute-api.us-east-1.amazonaws.com/dev
+  --dart-define=API_KEY=your_api_key_here \
+  --dart-define=API_BASE_URL=https://your-api-id.execute-api.us-east-1.amazonaws.com/dev \
+  --dart-define=WS_URL=wss://your-ws-id.execute-api.us-east-1.amazonaws.com/dev
 ```
 
-### 4. Run backend tests
-```bash
-cd backend
-pip install -r requirements.txt
-pytest -v
-```
+---
 
-### 5. Run Flutter tests
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `API_KEY` | ✅ | AWS API Gateway x-api-key |
+| `API_BASE_URL` | ✅ | API Gateway base URL |
+| `WS_URL` | ❌ | WebSocket API URL (disabled by default) |
+| `FIREBASE_API_KEY` | ✅ | Firebase project API key |
+| `OPENROUTER_API_KEY` | ✅ | OpenRouter API key for AI chat |
+| `BEDROCK_MODEL_ID` | ❌ | Bedrock model ID (default: claude-sonnet) |
+
+---
+
+## API Endpoints
+
+| Method | Path | Description | Lambda |
+|--------|------|-------------|--------|
+| `GET` | `/servers` | List EC2 instances for tenant | `list_servers` |
+| `GET` | `/alerts` | List CloudWatch alarms | `alert_processor` |
+| `GET` | `/logs` | Fetch CloudWatch log events | `metrics_streamer` |
+| `POST` | `/ai-chat` | Send message to AI assistant | `ai_analyzer` |
+| `POST` | `/fix` | Trigger automated fix | `auto_healer` |
+| `POST` | `/tenants` | Register new tenant | `tenant_onboarding` |
+| `GET` | `/tenants-lookup` | Look up tenant by email | `tenant_lookup` |
+| `POST` | `/ai-analysis` | Deep AI root cause analysis | `ai_analysis` |
+| `POST` | `/fix-execute` | Execute specific fix type | `fix_executor` |
+
+---
+
+## Running Tests
+
+### Flutter tests
+
 ```bash
 cd frontend
-flutter test
+flutter test                    # all tests
+flutter test --coverage         # with coverage report
+flutter test test/services/     # service tests only
+flutter test test/widgets/      # widget tests only
 ```
 
----
-
-## Multi-Account Onboarding
-
-Customers deploy one CloudFormation stack in their own AWS account:
+### Python backend tests
 
 ```bash
-aws cloudformation deploy \
-  --template-file infrastructure/tenant_onboarding_role.yaml \
-  --stack-name devopsgpt-monitoring \
-  --parameter-overrides \
-    DevOpsGPTMasterAccountId=YOUR_ACCOUNT_ID \
-    TenantId=customer-uuid \
-    AllowAutoHealing=true \
-  --capabilities CAPABILITY_NAMED_IAM
+# Install test dependencies
+pip install pytest pytest-cov boto3 moto
+
+# Run all backend tests
+pytest backend/ -v --cov=backend/lambdas --cov-report=term-missing
+
+# Run specific Lambda tests
+pytest backend/lambdas/cloudwatch_poller/test_handler.py -v
+pytest backend/lambdas/ai_analysis/test_handler.py -v
 ```
-
-This creates an IAM role trusted by DevOpsGPT. No access keys are ever stored.
-DevOpsGPT uses `sts:AssumeRole` with `ExternalId` validation on every request.
-
----
-
-## Security
-
-- No hardcoded API keys or URLs in source code — all via `--dart-define`
-- GitHub Secrets for CI/CD credentials
-- IAM least-privilege: Lambda role has only the permissions it needs
-- Cross-account access via `AssumeRole` + `ExternalId` (prevents confused-deputy attacks)
-- API Gateway key required on all REST endpoints
-- DynamoDB point-in-time recovery enabled on all tables
 
 ---
 
 ## CI/CD
 
-| Trigger | Pipeline | Action |
-|---|---|---|
-| PR to main (infrastructure/) | terraform.yml | `terraform plan` |
-| Push to main (infrastructure/) | terraform.yml | `terraform apply` |
-| Push to main (backend/) | lambda-deploy.yml | Zip + deploy all Lambdas |
-| Push to main (frontend/) | flutter.yml | Test + build APK artifact |
+Three GitHub Actions workflows run automatically:
+
+| Workflow | Trigger | Jobs |
+|----------|---------|------|
+| [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main`, `develop` | Flutter lint, test, build · Backend lint, test |
+| [`deploy-backend.yml`](.github/workflows/deploy-backend.yml) | Push to `main` | Terraform apply · Lambda deploy · Smoke tests |
+| [`deploy-flutter.yml`](.github/workflows/deploy-flutter.yml) | Push to `main` | Build signed APK · Firebase App Distribution |
+
+### Required GitHub Secrets
+
+| Secret | Used by |
+|--------|---------|
+| `AWS_ACCESS_KEY_ID` | All workflows |
+| `AWS_SECRET_ACCESS_KEY` | All workflows |
+| `API_KEY` | CI build, smoke tests |
+| `API_BASE_URL` | CI build, smoke tests |
+| `TF_STATE_BUCKET` | deploy-backend |
+| `KEYSTORE_FILE` | deploy-flutter (base64 encoded) |
+| `KEY_ALIAS` | deploy-flutter |
+| `KEY_PASSWORD` | deploy-flutter |
+| `FIREBASE_APP_ID` | deploy-flutter |
+| `FIREBASE_TOKEN` | deploy-flutter |
+| `CODECOV_TOKEN` | ci |
 
 ---
 
-## Healing Actions
+## Architecture Decisions
 
-Pre-approved actions (no arbitrary command execution):
+### WebSocket Disabled
+WebSocket real-time streaming is implemented in `frontend/lib/services/websocket_service.dart` but disabled via `WEBSOCKET_ENABLED = false`. The feature is out of scope for the MVP release and retained as the foundation for **FS3** in the roadmap. The app falls back to REST polling (30-second interval) for metric updates. See [FUTURE_ROADMAP.md](FUTURE_ROADMAP.md#fs3--real-time-websocket-streaming).
 
-| Action | What it runs |
-|---|---|
-| `restart_nginx` | `systemctl restart nginx` |
-| `restart_apache` | `systemctl restart apache2` |
-| `clear_disk` | Clears journal + apt cache |
-| `restart_docker` | `systemctl restart docker` |
-| `check_memory` | `free -h` + top memory processes |
-| `check_disk` | `df -h` + large files |
-| `check_cpu` | `top -bn1` snapshot |
-| `clear_logs` | Deletes log files >100MB |
+### Multi-Tenant Architecture
+Each tenant has an IAM role in their own AWS account. DevOpsGPT assumes this role via STS `AssumeRole` with an `ExternalId` (the tenant UUID) for security. The role ARN is stored in DynamoDB and looked up per request — no hardcoded credentials.
+
+### AI Provider
+The AI chat uses OpenRouter (configurable model) for conversational queries and AWS Bedrock Claude for deep infrastructure analysis. Both are configurable via environment variables.
+
+---
+
+## Future Roadmap
+
+See [FUTURE_ROADMAP.md](FUTURE_ROADMAP.md) for the full 6-item roadmap including:
+- FS1: Predictive AI Failure Analysis (SageMaker)
+- FS2: Auto-Scaling Automation
+- FS3: Real-Time WebSocket Streaming
+- FS4: Multi-Cloud Support (GCP, Azure)
+- FS5: Role-Based Access Control
+- FS6: AI Conversation Memory
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE)

@@ -6,9 +6,11 @@ class ApiConfig {
     'API_BASE_URL',
     defaultValue: 'https://83zbtddxvk.execute-api.us-east-1.amazonaws.com/dev',
   );
+  // SECURITY: Never hardcode API keys. Inject via --dart-define=API_KEY=...
+  // at build time, or load from a secure secrets manager at runtime.
   static const apiKey = String.fromEnvironment(
     'API_KEY',
-    defaultValue: '934I15zv8k9EiSnf01q6rawwuW1sZgkk7am2UoST',
+    defaultValue: '', // empty default — must be supplied at build time
   );
 }
 

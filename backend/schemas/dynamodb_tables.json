@@ -1,0 +1,206 @@
+{
+  "tables": [
+    {
+      "TableName": "AlertsTable",
+      "description": "Stores CloudWatch alerts with severity levels",
+      "BillingMode": "PAY_PER_REQUEST",
+      "KeySchema": [
+        { "AttributeName": "serverId",  "KeyType": "HASH"  },
+        { "AttributeName": "timestamp", "KeyType": "RANGE" }
+      ],
+      "AttributeDefinitions": [
+        { "AttributeName": "serverId",   "AttributeType": "S" },
+        { "AttributeName": "timestamp",  "AttributeType": "S" },
+        { "AttributeName": "severity",   "AttributeType": "S" },
+        { "AttributeName": "status",     "AttributeType": "S" }
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "severity-index",
+          "KeySchema": [
+            { "AttributeName": "severity",  "KeyType": "HASH"  },
+            { "AttributeName": "timestamp", "KeyType": "RANGE" }
+          ],
+          "Projection": { "ProjectionType": "ALL" }
+        },
+        {
+          "IndexName": "status-index",
+          "KeySchema": [
+            { "AttributeName": "status",    "KeyType": "HASH"  },
+            { "AttributeName": "timestamp", "KeyType": "RANGE" }
+          ],
+          "Projection": { "ProjectionType": "ALL" }
+        }
+      ],
+      "TimeToLiveSpecification": {
+        "AttributeName": "ttl",
+        "Enabled": true
+      },
+      "PointInTimeRecoverySpecification": {
+        "PointInTimeRecoveryEnabled": true
+      },
+      "Tags": [
+        { "Key": "Project",     "Value": "DevOpsGPT" },
+        { "Key": "ManagedBy",   "Value": "Terraform"  },
+        { "Key": "Environment", "Value": "production" }
+      ],
+      "attributes": {
+        "serverId":   "String — EC2 instance ID",
+        "timestamp":  "String — ISO 8601 UTC timestamp",
+        "severity":   "String — LOW | MEDIUM | HIGH | CRITICAL",
+        "metricType": "String — CPU | MEMORY | DISK | NETWORK",
+        "value":      "Number — metric percentage value",
+        "status":     "String — OPEN | ACKNOWLEDGED | RESOLVED",
+        "ttl":        "Number — Unix epoch for auto-expiry (30 days)"
+      }
+    },
+    {
+      "TableName": "MetricsTable",
+      "description": "Time-series metrics collected every 5 minutes",
+      "BillingMode": "PAY_PER_REQUEST",
+      "KeySchema": [
+        { "AttributeName": "serverId",  "KeyType": "HASH"  },
+        { "AttributeName": "timestamp", "KeyType": "RANGE" }
+      ],
+      "AttributeDefinitions": [
+        { "AttributeName": "serverId",  "AttributeType": "S" },
+        { "AttributeName": "timestamp", "AttributeType": "S" }
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "timestamp-index",
+          "KeySchema": [
+            { "AttributeName": "timestamp", "KeyType": "HASH" }
+          ],
+          "Projection": { "ProjectionType": "KEYS_ONLY" }
+        }
+      ],
+      "TimeToLiveSpecification": {
+        "AttributeName": "ttl",
+        "Enabled": true
+      },
+      "PointInTimeRecoverySpecification": {
+        "PointInTimeRecoveryEnabled": true
+      },
+      "Tags": [
+        { "Key": "Project",     "Value": "DevOpsGPT" },
+        { "Key": "ManagedBy",   "Value": "Terraform"  },
+        { "Key": "Environment", "Value": "production" }
+      ],
+      "attributes": {
+        "serverId":   "String — EC2 instance ID",
+        "timestamp":  "String — ISO 8601 UTC timestamp",
+        "cpu":        "Number — CPU utilization percentage",
+        "memory":     "Number — Memory utilization percentage",
+        "disk":       "Number — Disk utilization percentage",
+        "networkIn":  "Number — Network bytes in",
+        "networkOut": "Number — Network bytes out",
+        "ttl":        "Number — Unix epoch for auto-expiry (7 days)"
+      }
+    },
+    {
+      "TableName": "FixHistoryTable",
+      "description": "Audit log of all automated fixes and AI analyses",
+      "BillingMode": "PAY_PER_REQUEST",
+      "KeySchema": [
+        { "AttributeName": "fixId",     "KeyType": "HASH"  },
+        { "AttributeName": "timestamp", "KeyType": "RANGE" }
+      ],
+      "AttributeDefinitions": [
+        { "AttributeName": "fixId",     "AttributeType": "S" },
+        { "AttributeName": "timestamp", "AttributeType": "S" },
+        { "AttributeName": "serverId",  "AttributeType": "S" },
+        { "AttributeName": "fixType",   "AttributeType": "S" }
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "serverId-index",
+          "KeySchema": [
+            { "AttributeName": "serverId",  "KeyType": "HASH"  },
+            { "AttributeName": "timestamp", "KeyType": "RANGE" }
+          ],
+          "Projection": { "ProjectionType": "ALL" }
+        },
+        {
+          "IndexName": "fixType-index",
+          "KeySchema": [
+            { "AttributeName": "fixType",   "KeyType": "HASH"  },
+            { "AttributeName": "timestamp", "KeyType": "RANGE" }
+          ],
+          "Projection": { "ProjectionType": "ALL" }
+        }
+      ],
+      "TimeToLiveSpecification": {
+        "AttributeName": "ttl",
+        "Enabled": true
+      },
+      "PointInTimeRecoverySpecification": {
+        "PointInTimeRecoveryEnabled": true
+      },
+      "Tags": [
+        { "Key": "Project",     "Value": "DevOpsGPT" },
+        { "Key": "ManagedBy",   "Value": "Terraform"  },
+        { "Key": "Environment", "Value": "production" }
+      ],
+      "attributes": {
+        "fixId":      "String — UUID for this fix execution",
+        "timestamp":  "String — ISO 8601 UTC timestamp",
+        "serverId":   "String — EC2 instance ID",
+        "fixType":    "String — RESTART_SERVICE | SCALE_UP | CLEAR_CACHE | RESTART_EC2 | AI_ANALYSIS",
+        "status":     "String — SUCCESS | FAILED | IN_PROGRESS",
+        "executedAt": "String — ISO 8601 UTC execution time",
+        "result":     "String — JSON-encoded result payload",
+        "ttl":        "Number — Unix epoch for auto-expiry (90 days)"
+      }
+    },
+    {
+      "TableName": "ServersTable",
+      "description": "Registry of monitored EC2 servers per tenant",
+      "BillingMode": "PAY_PER_REQUEST",
+      "KeySchema": [
+        { "AttributeName": "serverId", "KeyType": "HASH" }
+      ],
+      "AttributeDefinitions": [
+        { "AttributeName": "serverId",  "AttributeType": "S" },
+        { "AttributeName": "tenantId",  "AttributeType": "S" },
+        { "AttributeName": "status",    "AttributeType": "S" }
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "tenantId-index",
+          "KeySchema": [
+            { "AttributeName": "tenantId", "KeyType": "HASH" }
+          ],
+          "Projection": { "ProjectionType": "ALL" }
+        },
+        {
+          "IndexName": "status-index",
+          "KeySchema": [
+            { "AttributeName": "status",   "KeyType": "HASH" }
+          ],
+          "Projection": { "ProjectionType": "KEYS_ONLY" }
+        }
+      ],
+      "TimeToLiveSpecification": {
+        "AttributeName": "ttl",
+        "Enabled": false
+      },
+      "PointInTimeRecoverySpecification": {
+        "PointInTimeRecoveryEnabled": true
+      },
+      "Tags": [
+        { "Key": "Project",     "Value": "DevOpsGPT" },
+        { "Key": "ManagedBy",   "Value": "Terraform"  },
+        { "Key": "Environment", "Value": "production" }
+      ],
+      "attributes": {
+        "serverId": "String — EC2 instance ID (primary key)",
+        "tenantId": "String — DevOpsGPT tenant UUID",
+        "name":     "String — Human-readable server name",
+        "region":   "String — AWS region e.g. us-east-1",
+        "type":     "String — EC2 instance type e.g. t3.micro",
+        "status":   "String — running | stopped | terminated"
+      }
+    }
+  ]
+}

@@ -1,3 +1,9 @@
+# Environment / secrets — never commit these
+.env
+.env.local
+.env.*.local
+*.env
+
 # Miscellaneous
 *.class
 *.log

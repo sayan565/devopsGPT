@@ -43,9 +43,9 @@ class _AwsConnectScreenState extends State<AwsConnectScreen>
   String get _cfnUrl {
     final base = 'https://console.aws.amazon.com/cloudformation/home'
         '?region=us-east-1'
-        '#/stacks/create/review'
-        '?templateURL=https://raw.githubusercontent.com/'
-        'sayan565/devopsGPT/master/infrastructure/tenant_onboarding_role.yaml'
+        '#/stacks/quickcreate'
+        '?templateURL=https://devopsgpt-cfn-templates.s3.amazonaws.com/tenant_onboarding_role.yaml'
+        '&stackName=DevOpsGPT-Monitor'
         '&param_DevOpsGPTMasterAccountId=$_masterAccountId'
         '&param_TenantId=${widget.tenantId}';
     return base;

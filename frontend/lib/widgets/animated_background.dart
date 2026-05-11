@@ -44,7 +44,7 @@ class AnimatedBackground extends StatelessWidget {
                 gradient: RadialGradient(
                   colors: [
                     const Color(0xFF00D4FF)
-                        .withOpacity(isDark ? 0.12 : 0.08),
+                        .withValues(alpha: isDark ? 0.12 : 0.08),
                     Colors.transparent,
                   ],
                 ),
@@ -62,7 +62,7 @@ class AnimatedBackground extends StatelessWidget {
                 gradient: RadialGradient(
                   colors: [
                     const Color(0xFF7C3AED)
-                        .withOpacity(isDark ? 0.12 : 0.08),
+                        .withValues(alpha: isDark ? 0.12 : 0.08),
                     Colors.transparent,
                   ],
                 ),

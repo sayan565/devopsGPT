@@ -161,10 +161,7 @@ class ServerDetailScreen extends StatelessWidget {
                               server['availabilityZone'] ??
                                   'N/A'),
                           _detailRow(context, 'Launch Time',
-                              (server['launchTime'] ?? 'N/A')
-                                  .toString()
-                                  .substring(0, 19)
-                                  .replaceAll('T', ' ')),
+                              _safeDate(server['launchTime'])),
                         ],
                       ),
                     ),
@@ -226,8 +223,7 @@ class ServerDetailScreen extends StatelessWidget {
                                   : AppColors.success),
                           const SizedBox(height: 12),
                           Text(
-                            'Last synced: '
-                            '${(server['lastSyncedAt'] ?? '').toString().substring(0, 19).replaceAll('T', ' ')} UTC',
+                            'Last synced: ${_safeDate(server['lastSyncedAt'])} UTC',
                             style: TextStyle(
                                 color: textMuted,
                                 fontSize: 11),
@@ -321,6 +317,13 @@ class ServerDetailScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _safeDate(dynamic val) {
+    final s = (val ?? '').toString();
+    if (s.isEmpty || s == 'null') return 'N/A';
+    final clean = s.replaceAll('T', ' ');
+    return clean.length >= 19 ? clean.substring(0, 19) : clean;
   }
 
   Widget _progressMetric(BuildContext context,

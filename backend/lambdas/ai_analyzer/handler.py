@@ -54,6 +54,7 @@ def handler(event, context):
         _save_chat(tenant_id, session_id, message, response_text)
 
         return ok({
+            "explanation": response_text,
             "response": response_text,
             "session_id": session_id,
             "model": OPENROUTER_MODEL,

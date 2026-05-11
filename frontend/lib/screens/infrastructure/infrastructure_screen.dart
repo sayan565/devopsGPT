@@ -216,7 +216,7 @@ class _InfrastructureScreenState extends State<InfrastructureScreen> {
                                         color: textMuted)))
                             : ListView.separated(
                                 itemCount: filteredServers.length,
-                                separatorBuilder: (_, _) =>
+                                separatorBuilder: (_, __) =>
                                     Divider(height: 1, color: borderColor),
                                 itemBuilder: (ctx, i) =>
                                     _serverRow(filteredServers[i], ctx),

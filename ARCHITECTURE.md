@@ -68,12 +68,14 @@ pre-fills all parameters (master account ID, tenant UUID). Users only click
 "Create Stack" and copy one ARN.  
 **Template:** `infrastructure/tenant_onboarding_role.yaml`
 
-### 4. AI via OpenRouter (not Bedrock directly)
-**Decision:** The conversational AI chat uses OpenRouter API (currently `gpt-4o-mini`).
-Deep infrastructure analysis uses AWS Bedrock Claude.  
-**Rationale:** OpenRouter provides model flexibility and fallback options without
-AWS Bedrock quota constraints for the chat use case. The model is configurable
-via `OPENROUTER_MODEL` environment variable.
+### 4. AI via OpenRouter exclusively
+**Decision:** All AI functionality uses **OpenRouter API** (`openai/gpt-4o-mini` by default).
+Both the conversational chat (`ai_analyzer`) and deep infrastructure analysis (`ai_analysis`)
+use OpenRouter. The model is fully configurable via the `OPENROUTER_MODEL` environment variable
+— switching to Claude, Llama, or any other OpenRouter-supported model requires zero code changes.  
+**Rationale:** OpenRouter provides model flexibility, no AWS Marketplace subscription required,
+and consistent API across all AI use cases. The `OPENROUTER_API_KEY` is injected via Lambda
+environment variable — never hardcoded.
 
 ### 5. WebSocket Feature-Flagged
 **Decision:** WebSocket infrastructure is fully built but disabled via

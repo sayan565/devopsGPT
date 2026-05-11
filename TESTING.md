@@ -5,7 +5,7 @@
 | Lambda | Test File | Tests | Coverage |
 |--------|-----------|-------|----------|
 | `cloudwatch_poller` | `backend/lambdas/cloudwatch_poller/test_handler.py` | 5 | alert detection, SNS, DynamoDB write, error handling |
-| `ai_analysis` | `backend/lambdas/ai_analysis/test_handler.py` | 5 | Bedrock call, DynamoDB write, missing fields, error handling |
+| `ai_analysis` | `backend/lambdas/ai_analysis/test_handler.py` | 5 | OpenRouter call, DynamoDB write, missing fields, error handling |
 
 ### Run backend tests
 

@@ -1,13 +1,16 @@
 """
 Lambda: ai_analysis
 Route:  POST /ai-analysis
-Desc:   Receives server metrics + alert history, calls AWS Bedrock
-        for root cause analysis, saves result to DynamoDB FixHistoryTable.
+Desc:   Deep infrastructure analysis via OpenRouter API.
+        Receives {serverId, metricType, value, alertHistory},
+        returns structured JSON with rootCause, recommendations, riskLevel.
+        Saves result to DynamoDB FixHistoryTable.
 """
 import json
 import logging
 import os
 import uuid
+import urllib.request
 from datetime import datetime, timezone, timedelta
 
 import boto3
@@ -17,13 +20,14 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # ── Environment variables ─────────────────────────────────────────────────────
-FIX_HISTORY_TABLE = os.environ.get("FIX_HISTORY_TABLE", "devopsgpt-dev-fix-history")
-BEDROCK_MODEL_ID  = os.environ.get("BEDROCK_MODEL_ID",
-                                   "anthropic.claude-sonnet-4-20250514-v1:0")
-AWS_REGION        = os.environ.get("AWS_REGION", "us-east-1")
+FIX_HISTORY_TABLE  = os.environ.get("FIX_HISTORY_TABLE", "devopsgpt-dev-fix-history")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL   = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+OPENROUTER_URL     = "https://openrouter.ai/api/v1/chat/completions"
+AWS_REGION         = os.environ.get("AWS_REGION", "us-east-1")
 
-# ── Analysis prompt template ──────────────────────────────────────────────────
-ANALYSIS_PROMPT = """You are a senior AWS DevOps engineer. Analyze the following infrastructure alert and provide a structured response.
+# ── Analysis prompt ───────────────────────────────────────────────────────────
+ANALYSIS_PROMPT = """You are a senior AWS DevOps engineer. Analyze the following infrastructure alert.
 
 Server ID: {server_id}
 Metric Type: {metric_type}
@@ -40,14 +44,14 @@ Respond ONLY with valid JSON in this exact format:
   ],
   "riskLevel": "LOW|MEDIUM|HIGH|CRITICAL",
   "estimatedFixTime": "e.g. 5-10 minutes",
-  "confidence": "HIGH|MEDIUM|LOW",
-  "requiresHumanReview": true|false
+  "confidence": 0.85,
+  "requiresHumanReview": false
 }}"""
 
 
-def _call_bedrock(bedrock_client, server_id: str, metric_type: str,
-                  value: float, alert_history: list) -> dict:
-    """Call AWS Bedrock Claude model for analysis."""
+def _call_openrouter(server_id: str, metric_type: str,
+                     value: float, alert_history: list) -> dict:
+    """Call OpenRouter API for deep infrastructure analysis."""
     prompt = ANALYSIS_PROMPT.format(
         server_id=server_id,
         metric_type=metric_type,
@@ -55,66 +59,73 @@ def _call_bedrock(bedrock_client, server_id: str, metric_type: str,
         alert_history=json.dumps(alert_history[-5:] if alert_history else []),
     )
 
-    request_body = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 1024,
+    payload = json.dumps({
+        "model": OPENROUTER_MODEL,
         "messages": [
             {"role": "user", "content": prompt}
         ],
-    }
+        "max_tokens": 1024,
+    }).encode("utf-8")
 
-    response = bedrock_client.invoke_model(
-        modelId=BEDROCK_MODEL_ID,
-        body=json.dumps(request_body),
-        contentType="application/json",
-        accept="application/json",
+    req = urllib.request.Request(
+        OPENROUTER_URL,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type":  "application/json",
+            "HTTP-Referer":  "https://github.com/sayan565/devopsGPT",
+            "X-Title":       "DevOpsGPT",
+        },
+        method="POST",
     )
 
-    response_body = json.loads(response["body"].read())
-    content = response_body["content"][0]["text"]
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
 
-    # Parse the JSON response from Claude
+    content = result["choices"][0]["message"]["content"]
+
+    # Parse JSON response
     try:
         return json.loads(content)
     except json.JSONDecodeError:
-        # Extract JSON from markdown code block if present
         import re
-        match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
+        match = re.search(r'\{.*\}', content, re.DOTALL)
         if match:
-            return json.loads(match.group(1))
-        raise ValueError(f"Could not parse Bedrock response as JSON: {content[:200]}")
+            return json.loads(match.group())
+        raise ValueError(f"Could not parse response as JSON: {content[:200]}")
 
 
 def _save_analysis(dynamodb, analysis_id: str, server_id: str,
                    metric_type: str, value: float, result: dict) -> None:
-    """Save AI analysis result to DynamoDB FixHistoryTable."""
+    """Save analysis result to DynamoDB FixHistoryTable."""
     timestamp = datetime.now(timezone.utc).isoformat()
     dynamodb.put_item(
         TableName=FIX_HISTORY_TABLE,
         Item={
-            "fixId":          {"S": analysis_id},
-            "timestamp":      {"S": timestamp},
-            "serverId":       {"S": server_id},
-            "fixType":        {"S": "AI_ANALYSIS"},
-            "status":         {"S": "COMPLETED"},
-            "executedAt":     {"S": timestamp},
-            "result":         {"S": json.dumps(result)},
-            "metricType":     {"S": metric_type},
-            "metricValue":    {"N": str(value)},
-            "riskLevel":      {"S": result.get("riskLevel", "UNKNOWN")},
-            "ttl":            {"N": str(int((datetime.now(timezone.utc)
-                                             + timedelta(days=90)).timestamp()))},
+            "fixId":       {"S": analysis_id},
+            "timestamp":   {"S": timestamp},
+            "serverId":    {"S": server_id},
+            "fixType":     {"S": "AI_ANALYSIS"},
+            "status":      {"S": "COMPLETED"},
+            "executedAt":  {"S": timestamp},
+            "result":      {"S": json.dumps(result)},
+            "metricType":  {"S": metric_type},
+            "metricValue": {"N": str(value)},
+            "riskLevel":   {"S": result.get("riskLevel", "UNKNOWN")},
+            "confidence":  {"N": str(result.get("confidence", 0))},
+            "ttl":         {"N": str(int((datetime.now(timezone.utc)
+                                          + timedelta(days=90)).timestamp()))},
         },
     )
     logger.info("Analysis saved: id=%s server=%s", analysis_id, server_id)
 
 
 def handler(event, context):
-    """Main Lambda handler for AI analysis requests."""
+    """Main Lambda handler for deep AI analysis requests."""
     logger.info("ai_analysis triggered")
 
     try:
-        body = json.loads(event.get("body") or "{}")
+        body          = json.loads(event.get("body") or "{}")
         server_id     = body.get("serverId", "").strip()
         metric_type   = body.get("metricType", "CPU").strip().upper()
         value         = float(body.get("value", 0))
@@ -131,34 +142,31 @@ def handler(event, context):
         logger.info("Analyzing: server=%s metric=%s value=%.2f",
                     server_id, metric_type, value)
 
-        bedrock  = boto3.client("bedrock-runtime", region_name=AWS_REGION)
-        dynamodb = boto3.client("dynamodb",         region_name=AWS_REGION)
+        dynamodb = boto3.client("dynamodb", region_name=AWS_REGION)
 
-        # Call Bedrock for analysis
-        analysis_result = _call_bedrock(bedrock, server_id, metric_type,
-                                        value, alert_history)
+        # Call OpenRouter for analysis
+        analysis_result = _call_openrouter(server_id, metric_type,
+                                           value, alert_history)
 
         # Save to DynamoDB
         analysis_id = str(uuid.uuid4())
         _save_analysis(dynamodb, analysis_id, server_id,
                        metric_type, value, analysis_result)
 
-        response_payload = {
-            "analysisId":      analysis_id,
-            "analysis":        analysis_result.get("rootCause", ""),
-            "recommendations": analysis_result.get("fixRecommendations", []),
-            "riskLevel":       analysis_result.get("riskLevel", "UNKNOWN"),
-            "estimatedFixTime":analysis_result.get("estimatedFixTime", "Unknown"),
-            "confidence":      analysis_result.get("confidence", "MEDIUM"),
-            "requiresHumanReview": analysis_result.get("requiresHumanReview", True),
-            "timestamp":       datetime.now(timezone.utc).isoformat(),
-        }
-
         return {
             "statusCode": 200,
             "headers": {"Content-Type": "application/json",
                         "Access-Control-Allow-Origin": "*"},
-            "body": json.dumps(response_payload),
+            "body": json.dumps({
+                "analysisId":         analysis_id,
+                "analysis":           analysis_result.get("rootCause", ""),
+                "recommendations":    analysis_result.get("fixRecommendations", []),
+                "riskLevel":          analysis_result.get("riskLevel", "UNKNOWN"),
+                "estimatedFixTime":   analysis_result.get("estimatedFixTime", "Unknown"),
+                "confidence":         analysis_result.get("confidence", 0),
+                "requiresHumanReview":analysis_result.get("requiresHumanReview", True),
+                "timestamp":          datetime.now(timezone.utc).isoformat(),
+            }),
         }
 
     except Exception as e:

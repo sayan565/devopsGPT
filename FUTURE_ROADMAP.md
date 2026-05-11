@@ -174,7 +174,7 @@ previous conversation by `session_id`.
 1. Add `GET /chat-history?tenant_id=&session_id=` API endpoint backed by a
    new `chat_history` Lambda that queries the DynamoDB chat table
 2. Add a session list drawer in `ai_chat_screen.dart` showing past sessions
-3. Implement semantic search over past conversations using Bedrock embeddings
+3. Implement semantic search over past conversations using OpenRouter embeddings
    for "find similar past incidents" functionality
 
 ### Estimated Sprint Effort

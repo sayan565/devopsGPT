@@ -16,12 +16,12 @@ class ServerDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     double cpu    = double.tryParse(
-        server['cpu'].toString()) ?? 0;
+        (server['cpu_percent'] ?? server['cpu'] ?? 0).toString()) ?? 0;
     double memory = double.tryParse(
-        server['memory'].toString()) ?? 0;
+        (server['memory'] ?? 0).toString()) ?? 0;
     double disk   = double.tryParse(
-        server['disk']?.toString() ?? '0') ?? 0;
-    String status = server['status'] ?? 'unknown';
+        (server['disk'] ?? 0).toString()) ?? 0;
+    String status = server['state'] ?? server['status'] ?? 'unknown';
 
     final textPrimary = AppTheme.textPrimary(context);
     final textMuted   = AppTheme.textMuted(context);
@@ -63,8 +63,7 @@ class ServerDetailScreen extends StatelessWidget {
                           CrossAxisAlignment.start,
                       children: [
                         Text(
-                          server['name'] ??
-                              server['serverId'],
+                          server['name'] ?? server['id'] ?? server['serverId'] ?? 'Server',
                           style: GoogleFonts.inter(
                             color: textPrimary,
                             fontSize: 18,
@@ -72,7 +71,7 @@ class ServerDetailScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          server['serverId'] ?? '',
+                          server['id'] ?? server['serverId'] ?? '',
                           style: TextStyle(
                               color: textMuted,
                               fontSize: 12),
@@ -148,20 +147,19 @@ class ServerDetailScreen extends StatelessWidget {
                               Icons.info_rounded),
                           const SizedBox(height: 16),
                           _detailRow(context, 'Instance ID',
-                              server['serverId'] ?? 'N/A'),
+                              server['id'] ?? server['serverId'] ?? 'N/A'),
                           _detailRow(context, 'Instance Type',
-                              server['instanceType'] ?? 'N/A'),
+                              server['type'] ?? server['instanceType'] ?? 'N/A'),
                           _detailRow(context, 'State',
-                              server['state'] ?? 'N/A'),
+                              server['state'] ?? server['status'] ?? 'N/A'),
                           _detailRow(context, 'AMI ID',
-                              server['amiId'] ?? 'N/A'),
+                              server['ami_id'] ?? server['amiId'] ?? 'N/A'),
                           _detailRow(context, 'Region',
                               server['region'] ?? 'N/A'),
                           _detailRow(context, 'Availability Zone',
-                              server['availabilityZone'] ??
-                                  'N/A'),
+                              server['az'] ?? server['availabilityZone'] ?? 'N/A'),
                           _detailRow(context, 'Launch Time',
-                              _safeDate(server['launchTime'])),
+                              _safeDate(server['launch_time'] ?? server['launchTime'])),
                         ],
                       ),
                     ),
@@ -179,15 +177,14 @@ class ServerDetailScreen extends StatelessWidget {
                               Icons.network_check_rounded),
                           const SizedBox(height: 16),
                           _detailRow(context, 'Public IP',
-                              server['publicIp'] ?? 'N/A',
+                              server['public_ip'] ?? server['publicIp'] ?? 'N/A',
                               copyable: true),
                           _detailRow(context, 'Private IP',
-                              server['privateIp'] ?? 'N/A',
+                              server['private_ip'] ?? server['privateIp'] ?? 'N/A',
                               copyable: true),
                           _detailRow(context,
                               'Security Groups',
-                              server['securityGroups'] ??
-                                  'N/A'),
+                              server['security_groups'] ?? server['securityGroups'] ?? 'N/A'),
                         ],
                       ),
                     ),

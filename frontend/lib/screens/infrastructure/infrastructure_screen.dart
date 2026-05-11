@@ -242,20 +242,20 @@ class _InfrastructureScreenState extends State<InfrastructureScreen> {
   }
 
   Widget _serverRow(dynamic server, BuildContext context) {
-    final double cpu    = double.tryParse(server['cpu'].toString()) ?? 0;
-    final double memory = double.tryParse(server['memory'].toString()) ?? 0;
-    final String status = server['status'] ?? 'unknown';
-    final String name   = server['name'] ?? server['serverId'];
-    final String id     = server['serverId'] ?? '';
-    final String type   = server['instanceType'] ?? 'N/A';
+    final double cpu    = double.tryParse(server['cpu_percent']?.toString() ?? server['cpu']?.toString() ?? '0') ?? 0;
+    final double memory = double.tryParse(server['memory']?.toString() ?? '0') ?? 0;
+    final String status = server['state'] ?? server['status'] ?? 'unknown';
+    final String name   = server['name'] ?? server['id'] ?? 'Unknown';
+    final String id     = server['id'] ?? server['serverId'] ?? '';
+    final String type   = server['type'] ?? server['instanceType'] ?? 'N/A';
 
     final textMuted   = AppTheme.textMuted(context);
     final cardColor   = AppTheme.card(context);
     final progressBg  = AppTheme.cardBorder(context);
 
-    Color statusColor = status == 'healthy'
+    Color statusColor = (status == 'healthy' || status == 'running')
         ? AppColors.success
-        : status == 'critical'
+        : (status == 'critical' || status == 'terminated')
             ? AppColors.critical
             : status == 'stopped'
                 ? textMuted

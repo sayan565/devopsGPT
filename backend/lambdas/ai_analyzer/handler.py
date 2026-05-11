@@ -42,6 +42,17 @@ When given alarm or metric context, always:
 - List 2-3 remediation steps
 - Flag if human review is needed before auto-healing
 
+IMPORTANT: When analyzing infrastructure alerts, respond in this JSON format:
+{
+  "explanation": "Human-readable markdown explanation of the root cause and fix",
+  "root_cause": "Brief root cause summary",
+  "recommended_action": "specific_action_slug e.g. restart_service, scale_up, clear_cache",
+  "confidence": 0.85,
+  "reasoning": "Why this confidence level was assigned",
+  "requires_human_review": false
+}
+
+For general questions (not alerts), respond with plain markdown text.
 Format responses in markdown. Be concise and precise."""
 
 
@@ -74,15 +85,41 @@ def handler(event, context):
         # ── Call OpenRouter with full conversation thread ──────────────────────
         response_text = _call_openrouter(user_content, conversation_messages)
 
-        # ── Persist this exchange to DynamoDB ─────────────────────────────────
-        _save_chat(tenant_id, session_id, message, response_text)
+        # ── Try to parse structured JSON response (for alert analysis) ────────
+        confidence        = None
+        recommended_action = None
+        requires_human_review = True
+        explanation       = response_text
 
-        return ok({
-            "explanation": response_text,
-            "response":    response_text,   # backward-compat alias
+        try:
+            import re
+            # Extract JSON block if present
+            json_match = re.search(r'\{[^{}]*"confidence"[^{}]*\}', response_text, re.DOTALL)
+            if json_match:
+                parsed = json.loads(json_match.group())
+                explanation            = parsed.get("explanation", response_text)
+                confidence             = parsed.get("confidence")
+                recommended_action     = parsed.get("recommended_action")
+                requires_human_review  = parsed.get("requires_human_review", True)
+        except Exception:
+            pass  # Non-fatal — use raw response_text as explanation
+
+        # ── Persist this exchange to DynamoDB ─────────────────────────────────
+        _save_chat(tenant_id, session_id, message, explanation,
+                   confidence=confidence, recommended_action=recommended_action)
+
+        response_payload = {
+            "explanation": explanation,
+            "response":    explanation,   # backward-compat alias
             "session_id":  session_id,
             "model":       OPENROUTER_MODEL,
-        })
+        }
+        if confidence is not None:
+            response_payload["confidence"]           = confidence
+            response_payload["recommended_action"]   = recommended_action
+            response_payload["requires_human_review"] = requires_human_review
+
+        return ok(response_payload)
 
     except Exception as e:
         print(f"[ai_analyzer] ERROR: {e}")
@@ -181,19 +218,24 @@ def _call_openrouter(user_message: str, history: list) -> str:
     return result["choices"][0]["message"]["content"]
 
 
-def _save_chat(tenant_id: str, session_id: str, question: str, answer: str) -> None:
+def _save_chat(tenant_id: str, session_id: str, question: str, answer: str,
+               confidence: float = None, recommended_action: str = None) -> None:
     """Persist the question/answer pair to DynamoDB for future context loading."""
     try:
         dynamodb = boto3.client("dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1"))
-        dynamodb.put_item(
-            TableName=CHAT_TABLE,
-            Item={
-                "session_id": {"S": session_id},
-                "timestamp":  {"S": datetime.now(timezone.utc).isoformat()},
-                "tenant_id":  {"S": tenant_id},
-                "question":   {"S": question[:2000]},
-                "answer":     {"S": answer[:5000]},
-            },
-        )
+        item = {
+            "session_id": {"S": session_id},
+            "timestamp":  {"S": datetime.now(timezone.utc).isoformat()},
+            "tenant_id":  {"S": tenant_id},
+            "question":   {"S": question[:2000]},
+            "answer":     {"S": answer[:5000]},
+        }
+        # Log confidence score if present (enables FS2 auto-healing trigger)
+        if confidence is not None:
+            item["confidence"] = {"N": str(round(confidence, 4))}
+        if recommended_action:
+            item["recommended_action"] = {"S": recommended_action}
+
+        dynamodb.put_item(TableName=CHAT_TABLE, Item=item)
     except Exception as e:
         print(f"[ai_analyzer] chat save failed (non-fatal): {e}")

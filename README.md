@@ -1,5 +1,10 @@
 # DevOpsGPT — AI-Powered Cloud Operations Platform
 
+![CI](https://github.com/sayan565/devopsGPT/actions/workflows/ci.yml/badge.svg)
+![Deploy Backend](https://github.com/sayan565/devopsGPT/actions/workflows/deploy-backend.yml/badge.svg)
+![Terraform](https://github.com/sayan565/devopsGPT/actions/workflows/terraform.yml/badge.svg)
+![Deploy Flutter](https://github.com/sayan565/devopsGPT/actions/workflows/deploy-flutter.yml/badge.svg)
+
 DevOpsGPT is a multi-tenant SaaS platform that monitors AWS infrastructure in real time, uses AI to diagnose incidents, and executes automated fixes — all from a Flutter mobile app. It eliminates the need for engineers to manually triage CloudWatch alarms by providing instant root cause analysis and one-tap remediation.
 
 ---

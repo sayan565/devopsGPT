@@ -1,250 +1,135 @@
-\# DevOpsGPT — Deploy Guide
+# DevOpsGPT — Deployment Guide
 
+## Prerequisites
 
+- AWS CLI v2 configured: `aws configure`
+- Terraform 1.5+: [terraform.io/downloads](https://terraform.io/downloads)
+- Flutter SDK 3.x: [flutter.dev](https://flutter.dev/docs/get-started/install)
+- Python 3.11+
+- Your AWS Account ID ready
 
-\## Prerequisites
+---
 
-\- AWS CLI configured: `aws configure`
-
-\- Terraform installed: `brew install terraform` or https://terraform.io/downloads
-
-\- Your AWS account ID ready
-
-
-
-\---
-
-
-
-\## Step 1 — Restructure repo (one-time)
-
-```bash
-
-bash migrate\_to\_monorepo.sh
-
-git add . \&\& git commit -m "refactor: monorepo layout"
-
-git push
-
-```
-
-
-
-\---
-
-
-
-\## Step 2 — Add GitHub Secrets
+## Step 1 — Add GitHub Secrets
 
 Go to your repo → Settings → Secrets → Actions. Add:
 
+| Secret | Description |
+|--------|-------------|
+| `AWS_ACCESS_KEY_ID` | IAM user access key |
+| `AWS_SECRET_ACCESS_KEY` | IAM user secret key |
+| `API_BASE_URL` | API Gateway URL (filled after Step 3) |
+| `API_KEY` | API Gateway key value (filled after Step 3) |
+| `WS_URL` | WebSocket API URL (filled after Step 3) |
+| `FIREBASE_API_KEY` | Firebase project API key |
+| `FIREBASE_APP_ID` | Firebase app ID |
 
+---
 
-| Secret | Value |
-
-|---|---|
-
-| `AWS\_ACCESS\_KEY\_ID` | Your IAM user access key |
-
-| `AWS\_SECRET\_ACCESS\_KEY` | Your IAM user secret key |
-
-| `API\_BASE\_URL` | Filled after Step 4 |
-
-| `API\_KEY` | Filled after Step 4 |
-
-| `WS\_URL` | Filled after Step 4 |
-
-
-
-\---
-
-
-
-\## Step 3 — Deploy infrastructure with Terraform
+## Step 2 — Deploy Infrastructure with Terraform
 
 ```bash
-
 cd infrastructure
 
-
-
-\# Initialize (downloads providers)
-
+# Initialize (downloads providers)
 terraform init
 
-
-
-\# Preview what will be created
-
+# Preview what will be created
 terraform plan -var-file=environments/dev/terraform.tfvars
 
-
-
-\# Deploy everything
-
+# Deploy everything
 terraform apply -var-file=environments/dev/terraform.tfvars
-
 ```
 
+Terraform creates:
+- 8 Lambda functions
+- REST API Gateway (7 routes)
+- WebSocket API Gateway
+- 5 DynamoDB tables
+- IAM roles with least-privilege policies
+- CloudWatch alarms + dashboard
+- EventBridge rules (1-min poller, 5-min collector)
 
+---
 
-Terraform will create:
-
-\- ✅ 6 Lambda functions
-
-\- ✅ REST API Gateway (5 routes)
-
-\- ✅ WebSocket API
-
-\- ✅ 5 DynamoDB tables
-
-\- ✅ IAM roles
-
-\- ✅ CloudWatch alarms + dashboard
-
-
-
-\---
-
-
-
-\## Step 4 — Get your URLs
+## Step 3 — Get Your URLs
 
 After `terraform apply`, run:
 
 ```bash
-
 terraform output
-
 ```
 
-
-
-You'll see:
-
+Output:
 ```
-
-api\_gateway\_url = "https://xxxx.execute-api.us-east-1.amazonaws.com/dev"
-
-websocket\_url   = "wss://yyyy.execute-api.us-east-1.amazonaws.com/dev"
-
-api\_key\_id      = "abc123..."
-
+api_gateway_url = "https://xxxx.execute-api.us-east-1.amazonaws.com/dev"
+websocket_url   = "wss://yyyy.execute-api.us-east-1.amazonaws.com/dev"
+api_key_id      = "abc123..."
 ```
-
-
 
 Get the API key value:
-
 ```bash
-
-aws apigateway get-api-key --api-key $(terraform output -raw api\_key\_id) --include-value
-
+aws apigateway get-api-key \
+  --api-key $(terraform output -raw api_key_id) \
+  --include-value \
+  --query "value" \
+  --output text
 ```
-
-
 
 Update GitHub Secrets with these values.
 
+---
 
-
-\---
-
-
-
-\## Step 5 — Run Flutter locally
+## Step 4 — Run Flutter Locally
 
 ```bash
-
 cd frontend
-
-flutter run \\
-
-&#x20; --dart-define=API\_BASE\_URL=https://xxxx.execute-api.us-east-1.amazonaws.com/dev \\
-
-&#x20; --dart-define=API\_KEY=your-api-key-value \\
-
-&#x20; --dart-define=WS\_URL=wss://yyyy.execute-api.us-east-1.amazonaws.com/dev
-
+flutter pub get
+flutter run \
+  --dart-define=API_BASE_URL=https://xxxx.execute-api.us-east-1.amazonaws.com/dev \
+  --dart-define=API_KEY=your-api-key-value \
+  --dart-define=WS_URL=wss://yyyy.execute-api.us-east-1.amazonaws.com/dev \
+  --dart-define=FIREBASE_API_KEY=your-firebase-key
 ```
 
+---
 
+## Step 5 — Onboard a New Tenant
 
-\---
+1. User signs up in the app
+2. App shows the AWS Connect screen
+3. User clicks **Deploy to My AWS** — opens CloudFormation with pre-filled parameters
+4. CloudFormation creates `DevOpsGPTMonitorRole` in their account (read-only)
+5. User copies the `RoleArn` from CloudFormation Outputs tab
+6. User pastes it in the app → clicks **Connect My AWS Account**
+7. Dashboard loads their EC2 instances automatically
 
+The CloudFormation template is hosted at:
+```
+https://devopsgpt-cfn-templates.s3.amazonaws.com/tenant_onboarding_role.yaml
+```
 
+---
 
-\## Step 6 — Onboard a tenant (multi-account)
+## CI/CD — Automatic on Git Push
 
+| Files changed | Pipeline | Result |
+|---------------|----------|--------|
+| `infrastructure/**` | `terraform.yml` | Plan on PR, Apply on merge to main |
+| `backend/**` | `deploy-backend.yml` | Zip + deploy all Lambdas + smoke tests |
+| `frontend/**` | `ci.yml` | Lint + test + build APK |
+| Push to `main` | `deploy-flutter.yml` | Signed APK + Firebase App Distribution |
 
+---
 
-1\. Give the customer your master AWS Account ID
+## Running Tests
 
-2\. They run in their account:
+```bash
+# Flutter tests
+cd frontend
+flutter test --coverage
 
-&#x20;  ```bash
-
-&#x20;  aws cloudformation deploy \\
-
-&#x20;    --template-file infrastructure/tenant\_onboarding\_role.yaml \\
-
-&#x20;    --stack-name devopsgpt-monitoring \\
-
-&#x20;    --parameter-overrides \\
-
-&#x20;      DevOpsGPTMasterAccountId=YOUR\_ACCOUNT\_ID \\
-
-&#x20;      TenantId=their-tenant-uuid \\
-
-&#x20;      AllowAutoHealing=true \\
-
-&#x20;    --capabilities CAPABILITY\_NAMED\_IAM
-
-&#x20;  ```
-
-3\. They send you the `RoleArn` output
-
-4\. Register via API:
-
-&#x20;  ```bash
-
-&#x20;  curl -X POST https://xxxx.execute-api.us-east-1.amazonaws.com/dev/tenants/register \\
-
-&#x20;    -H "x-api-key: YOUR\_KEY" \\
-
-&#x20;    -H "Content-Type: application/json" \\
-
-&#x20;    -d '{
-
-&#x20;      "company": "Acme Corp",
-
-&#x20;      "role\_arn": "arn:aws:iam::123456789:role/DevOpsGPTMonitoringRole",
-
-&#x20;      "regions": \["us-east-1"]
-
-&#x20;    }'
-
-&#x20;  ```
-
-
-
-\---
-
-
-
-\## CI/CD — What happens automatically on git push
-
-
-
-| What changed | Pipeline triggered | Result |
-
-|---|---|---|
-
-| `infrastructure/` | `terraform.yml` | Plan on PR, Apply on merge |
-
-| `backend/` | `lambda-deploy.yml` | Zip + deploy all Lambdas |
-
-| `frontend/` | `flutter.yml` | Test + build APK |
-
-
-
+# Python backend tests
+pip install pytest pytest-cov boto3 moto
+pytest backend/ -v --cov=backend/lambdas
+```

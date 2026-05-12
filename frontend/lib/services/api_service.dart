@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 
 class ApiConfig {
@@ -12,6 +13,11 @@ class ApiConfig {
     'API_KEY',
     defaultValue: '', // empty default — must be supplied at build time
   );
+
+  // Retry configuration
+  static const int maxRetries      = 3;
+  static const int retryBaseMs     = 500;  // 500ms base delay
+  static const int retryMaxMs      = 8000; // 8s max delay
 }
 
 class ApiService {
@@ -143,26 +149,67 @@ class ApiService {
 
   // ── Private helpers ───────────────────────────────────────────────────────
   static Future<Map<String, dynamic>> _get(Uri uri) async {
-    try {
+    return _withRetry(() async {
       final response = await http
           .get(uri, headers: _headers)
           .timeout(const Duration(seconds: 30));
       return _parse(response);
-    } catch (e) {
-      throw ApiException('Network error: $e');
-    }
+    });
   }
 
   static Future<Map<String, dynamic>> _post(
       Uri uri, Map<String, dynamic> body) async {
-    try {
+    return _withRetry(() async {
       final response = await http
           .post(uri, headers: _headers, body: jsonEncode(body))
           .timeout(const Duration(seconds: 60));
       return _parse(response);
-    } catch (e) {
-      throw ApiException('Network error: $e');
+    }, retryOn5xx: true);
+  }
+
+  /// Retry with exponential backoff + jitter.
+  /// Retries on network errors and optionally on 5xx responses.
+  /// Does NOT retry on 4xx (client errors — retrying won't help).
+  static Future<Map<String, dynamic>> _withRetry(
+    Future<Map<String, dynamic>> Function() fn, {
+    bool retryOn5xx = false,
+  }) async {
+    final rng = Random();
+    int attempt = 0;
+
+    while (true) {
+      try {
+        return await fn();
+      } on ApiException catch (e) {
+        // Retry on 5xx server errors if requested, but not on 4xx
+        if (retryOn5xx &&
+            e.statusCode != null &&
+            e.statusCode! >= 500 &&
+            attempt < ApiConfig.maxRetries) {
+          await _backoff(attempt, rng);
+          attempt++;
+          continue;
+        }
+        rethrow;
+      } catch (e) {
+        // Retry on network/timeout errors
+        if (attempt < ApiConfig.maxRetries) {
+          await _backoff(attempt, rng);
+          attempt++;
+          continue;
+        }
+        throw ApiException('Network error after ${attempt + 1} attempts: $e');
+      }
     }
+  }
+
+  /// Exponential backoff with full jitter:
+  /// delay = random(0, min(maxMs, baseMs * 2^attempt))
+  static Future<void> _backoff(int attempt, Random rng) async {
+    final cap   = ApiConfig.retryMaxMs;
+    final base  = ApiConfig.retryBaseMs;
+    final delay = rng.nextInt(min(cap, base * (1 << attempt)));
+    await Future.delayed(Duration(milliseconds: delay));
   }
 
   static Map<String, dynamic> _parse(http.Response response) {

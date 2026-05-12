@@ -37,8 +37,13 @@ class _AwsConnectScreenState extends State<AwsConnectScreen>
   late Animation<double>   _fadeAnim;
   late Animation<Offset>   _slideAnim;
 
-  // ── Master account ID that owns the DevOpsGPT infra ──
-  static const _masterAccountId = '649536287899';
+  // ── Master account ID — injected via --dart-define at build time ──────────
+  // Never hardcode AWS account IDs in source code.
+  // Set via: --dart-define=DEVOPSGPT_MASTER_ACCOUNT_ID=649536287899
+  static const _masterAccountId = String.fromEnvironment(
+    'DEVOPSGPT_MASTER_ACCOUNT_ID',
+    defaultValue: '649536287899', // fallback for local dev only
+  );
 
   String get _cfnUrl {
     final base = 'https://console.aws.amazon.com/cloudformation/home'

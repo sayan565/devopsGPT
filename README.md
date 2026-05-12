@@ -132,6 +132,7 @@ flutter run \
 | `FIREBASE_API_KEY` | ✅ | Firebase project API key |
 | `OPENROUTER_API_KEY` | ✅ | OpenRouter API key — set on Lambda env var |
 | `OPENROUTER_MODEL` | ❌ | AI model (default: `openai/gpt-4o-mini`) |
+| `DEVOPSGPT_MASTER_ACCOUNT_ID` | ❌ | Master AWS account ID (default: pre-configured) |
 
 ---
 
@@ -220,7 +221,18 @@ WebSocket infrastructure is **completely implemented and deployed**:
 The REST polling fallback (30-second interval) provides equivalent functionality for the MVP.
 Enabling WebSocket requires one line change + `data_collector` broadcast extension (see FS3).
 
-### SLA Breach Prevention
+### DynamoDB Access Patterns — GSI over Scan
+All DynamoDB lookups use **GSI-based Query operations** instead of full-table Scans:
+- `tenant_lookup` Lambda queries `email-index` GSI on the tenants table — O(1) cost regardless of tenant count
+- `websocket_handler` Lambda queries `tenant_id-index` GSI on ws_conns table — O(connections_for_tenant) instead of O(all_connections)
+
+Both GSIs are defined in `infrastructure/modules/dynamodb/main.tf`. Scan fallback is retained in `tenant_lookup` for graceful degradation if the GSI is not yet provisioned.
+
+### Flutter API Resilience — Retry with Exponential Backoff
+`frontend/lib/services/api_service.dart` implements retry logic with **full jitter exponential backoff**:
+- Up to 3 retries on network errors and 5xx responses
+- Delay = `random(0, min(8000ms, 500ms × 2^attempt))`
+- 4xx errors (client errors) are not retried — they indicate a logic error, not a transient failure
 The system addresses SLA breach prevention through two mechanisms:
 1. **Reactive:** `cloudwatch_poller` detects threshold breaches and triggers `auto_healer` within 60 seconds
 2. **Proactive (FS1):** CloudWatch Anomaly Detection integration planned to alert 15–30 minutes before breach

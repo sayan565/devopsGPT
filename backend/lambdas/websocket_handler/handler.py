@@ -2,20 +2,26 @@
 Lambda: websocket_handler
 Routes: $connect, $disconnect, sendMetrics
 Desc:   Manages WebSocket connections for real-time dashboard updates.
-        Connection IDs stored in DynamoDB.
-        metrics_streamer Lambda pushes data through here.
+        Connection IDs stored in DynamoDB with TTL.
+        Uses GSI (tenant_id-index) Query instead of Scan for broadcast.
 """
 import json
 import boto3
 import os
+import logging
 from datetime import datetime, timezone
 
-CONNECTIONS_TABLE = os.environ.get("CONNECTIONS_TABLE", "devopsgpt-ws-connections")
-WEBSOCKET_ENDPOINT = os.environ.get("WEBSOCKET_ENDPOINT", "")  # Set by Terraform output
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+CONNECTIONS_TABLE  = os.environ.get("CONNECTIONS_TABLE", "devopsgpt-dev-ws_conns")
+WEBSOCKET_ENDPOINT = os.environ.get("WEBSOCKET_ENDPOINT", "")
+# GSI name on ws_conns table — hash key: tenant_id
+TENANT_GSI         = os.environ.get("TENANT_GSI_NAME", "tenant_id-index")
 
 
 def handler(event, context):
-    route = event.get("requestContext", {}).get("routeKey", "")
+    route         = event.get("requestContext", {}).get("routeKey", "")
     connection_id = event.get("requestContext", {}).get("connectionId", "")
 
     if route == "$connect":
@@ -39,13 +45,14 @@ def _on_connect(connection_id: str, event: dict) -> dict:
                 "connection_id": {"S": connection_id},
                 "tenant_id":     {"S": tenant_id},
                 "connected_at":  {"S": datetime.now(timezone.utc).isoformat()},
-                "ttl":           {"N": str(int(datetime.now(timezone.utc).timestamp()) + 7200)},  # 2hr TTL
+                # 2-hour TTL — auto-cleans stale connections
+                "ttl": {"N": str(int(datetime.now(timezone.utc).timestamp()) + 7200)},
             },
         )
-        print(f"[ws] CONNECTED: {connection_id} tenant={tenant_id}")
+        logger.info("[ws] CONNECTED: %s tenant=%s", connection_id, tenant_id)
         return {"statusCode": 200, "body": "Connected"}
     except Exception as e:
-        print(f"[ws] connect error: {e}")
+        logger.error("[ws] connect error: %s", e)
         return {"statusCode": 500, "body": str(e)}
 
 
@@ -57,30 +64,39 @@ def _on_disconnect(connection_id: str) -> dict:
             TableName=CONNECTIONS_TABLE,
             Key={"connection_id": {"S": connection_id}},
         )
-        print(f"[ws] DISCONNECTED: {connection_id}")
+        logger.info("[ws] DISCONNECTED: %s", connection_id)
         return {"statusCode": 200, "body": "Disconnected"}
     except Exception as e:
-        print(f"[ws] disconnect error: {e}")
+        logger.error("[ws] disconnect error: %s", e)
         return {"statusCode": 500, "body": str(e)}
 
 
 def _broadcast_metrics(event: dict) -> dict:
     """
     Push a metrics payload to all connected clients for a tenant.
-    Called by metrics_streamer Lambda (not the Flutter client directly).
+    Uses GSI Query on tenant_id-index instead of full-table Scan.
+    Called by data_collector Lambda — not the Flutter client directly.
     """
     try:
-        body = json.loads(event.get("body") or "{}")
+        body      = json.loads(event.get("body") or "{}")
         tenant_id = body.get("tenant_id", "default")
-        payload = body.get("payload", {})
+        payload   = body.get("payload", {})
 
-        # Get all connections for this tenant
         dynamodb = boto3.client("dynamodb")
-        result = dynamodb.scan(
+
+        # ── GSI Query (O(connections_for_tenant)) instead of full Scan ────────
+        result = dynamodb.query(
             TableName=CONNECTIONS_TABLE,
-            FilterExpression="tenant_id = :t",
+            IndexName=TENANT_GSI,
+            KeyConditionExpression="tenant_id = :t",
             ExpressionAttributeValues={":t": {"S": tenant_id}},
         )
+        connections = result.get("Items", [])
+        logger.info("[ws] broadcasting to %d connections for tenant=%s",
+                    len(connections), tenant_id)
+
+        if not connections:
+            return {"statusCode": 200, "body": "No active connections"}
 
         endpoint_url = f"https://{WEBSOCKET_ENDPOINT}"
         apigw = boto3.client(
@@ -89,26 +105,42 @@ def _broadcast_metrics(event: dict) -> dict:
             region_name=os.environ.get("AWS_REGION", "us-east-1"),
         )
 
+        sent  = 0
         stale = []
-        for item in result.get("Items", []):
+        for item in connections:
             cid = item["connection_id"]["S"]
             try:
                 apigw.post_to_connection(
                     ConnectionId=cid,
                     Data=json.dumps(payload).encode("utf-8"),
                 )
+                sent += 1
             except apigw.exceptions.GoneException:
+                # Connection no longer active — mark for cleanup
                 stale.append(cid)
+            except Exception as e:
+                logger.warning("[ws] failed to push to %s: %s", cid, e)
 
-        # Clean up stale connections
+        # Clean up stale connections in batch
         for cid in stale:
-            dynamodb.delete_item(
-                TableName=CONNECTIONS_TABLE,
-                Key={"connection_id": {"S": cid}},
-            )
+            try:
+                dynamodb.delete_item(
+                    TableName=CONNECTIONS_TABLE,
+                    Key={"connection_id": {"S": cid}},
+                )
+                logger.info("[ws] cleaned stale connection: %s", cid)
+            except Exception:
+                pass
 
-        return {"statusCode": 200, "body": f"Pushed to {len(result.get('Items', [])) - len(stale)} clients"}
+        return {
+            "statusCode": 200,
+            "body": json.dumps({
+                "sent":  sent,
+                "stale": len(stale),
+                "total": len(connections),
+            }),
+        }
 
     except Exception as e:
-        print(f"[ws] broadcast error: {e}")
+        logger.error("[ws] broadcast error: %s", e)
         return {"statusCode": 500, "body": str(e)}

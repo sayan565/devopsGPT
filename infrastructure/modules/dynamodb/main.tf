@@ -3,18 +3,17 @@ variable "prefix" {}
 locals {
   tables = {
     # Core application tables
-    tenants  = { hash_key = "tenant_id",   range_key = null }
-    alerts   = { hash_key = "alert_id",    range_key = null }
-    actions  = { hash_key = "action_id",   range_key = null }
-    chat     = { hash_key = "session_id",  range_key = null }
+    tenants  = { hash_key = "tenant_id",    range_key = null }
+    alerts   = { hash_key = "alert_id",     range_key = null }
+    actions  = { hash_key = "action_id",    range_key = null }
+    chat     = { hash_key = "session_id",   range_key = null }
     ws_conns = { hash_key = "connection_id", range_key = null }
 
     # Metrics table — used by cloudwatch_poller and data_collector
-    # Referenced as METRICS_TABLE env var in both Lambda functions
-    metrics  = { hash_key = "serverId",    range_key = null }
+    metrics  = { hash_key = "serverId",     range_key = null }
 
     # Fix history — used by ai_analysis and fix_executor
-    fix-history = { hash_key = "fixId",   range_key = null }
+    fix-history = { hash_key = "fixId",     range_key = null }
   }
 }
 
@@ -44,6 +43,79 @@ resource "aws_dynamodb_table" "tables" {
     Project   = "DevOpsGPT"
     ManagedBy = "Terraform"
     Table     = each.key
+  }
+}
+
+# ── GSI: tenants table — email-index for O(1) tenant lookup by email ─────────
+resource "aws_dynamodb_table" "tenants_gsi" {
+  name         = "${var.prefix}-tenants"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "tenant_id"
+
+  attribute {
+    name = "tenant_id"
+    type = "S"
+  }
+  attribute {
+    name = "email"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "email-index"
+    hash_key        = "email"
+    projection_type = "ALL"
+  }
+
+  point_in_time_recovery { enabled = true }
+
+  lifecycle {
+    ignore_changes = [name]
+  }
+
+  tags = {
+    Project   = "DevOpsGPT"
+    ManagedBy = "Terraform"
+    Table     = "tenants"
+  }
+}
+
+# ── GSI: ws_conns table — tenant_id-index for O(1) broadcast by tenant ───────
+resource "aws_dynamodb_table" "ws_conns_gsi" {
+  name         = "${var.prefix}-ws_conns"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "connection_id"
+
+  attribute {
+    name = "connection_id"
+    type = "S"
+  }
+  attribute {
+    name = "tenant_id"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "tenant_id-index"
+    hash_key        = "tenant_id"
+    projection_type = "ALL"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  point_in_time_recovery { enabled = true }
+
+  lifecycle {
+    ignore_changes = [name]
+  }
+
+  tags = {
+    Project   = "DevOpsGPT"
+    ManagedBy = "Terraform"
+    Table     = "ws_conns"
   }
 }
 

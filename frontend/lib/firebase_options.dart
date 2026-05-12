@@ -1,5 +1,7 @@
 // Firebase configuration — all values injected via --dart-define at build time.
-// Never hardcode Firebase credentials in source code.
+// IMPORTANT: No real credentials appear in this file.
+// defaultValue is intentionally empty — the app will not initialise Firebase
+// unless the correct values are supplied at build time via --dart-define.
 //
 // Build command:
 //   flutter run \
@@ -20,40 +22,23 @@ import 'package:flutter/foundation.dart'
 
 class DefaultFirebaseOptions {
   // Set via --dart-define=FIREBASE_API_KEY=xxx at build time
-  static const _apiKey = String.fromEnvironment(
-    'FIREBASE_API_KEY',
-    defaultValue: 'AIzaSyD33E6FkTcGXe5t69pKIk30OyYhvIUqSE0',
-  );
+  // defaultValue is empty — real value must be supplied at build time
+  static const _apiKey = String.fromEnvironment('FIREBASE_API_KEY');
 
   // Set via --dart-define=FIREBASE_AUTH_DOMAIN=xxx at build time
-  static const _authDomain = String.fromEnvironment(
-    'FIREBASE_AUTH_DOMAIN',
-    defaultValue: 'devopsgpt-bfb52.firebaseapp.com',
-  );
+  static const _authDomain = String.fromEnvironment('FIREBASE_AUTH_DOMAIN');
 
   // Set via --dart-define=FIREBASE_PROJECT_ID=xxx at build time
-  static const _projectId = String.fromEnvironment(
-    'FIREBASE_PROJECT_ID',
-    defaultValue: 'devopsgpt-bfb52',
-  );
+  static const _projectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
 
   // Set via --dart-define=FIREBASE_STORAGE_BUCKET=xxx at build time
-  static const _storageBucket = String.fromEnvironment(
-    'FIREBASE_STORAGE_BUCKET',
-    defaultValue: 'devopsgpt-bfb52.firebasestorage.app',
-  );
+  static const _storageBucket = String.fromEnvironment('FIREBASE_STORAGE_BUCKET');
 
   // Set via --dart-define=FIREBASE_MESSAGING_SENDER_ID=xxx at build time
-  static const _messagingSenderId = String.fromEnvironment(
-    'FIREBASE_MESSAGING_SENDER_ID',
-    defaultValue: '1063250830043',
-  );
+  static const _messagingSenderId = String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID');
 
   // Set via --dart-define=FIREBASE_APP_ID=xxx at build time
-  static const _appId = String.fromEnvironment(
-    'FIREBASE_APP_ID',
-    defaultValue: '1:1063250830043:web:7f5d1fa8f6ce7a4627e2fe',
-  );
+  static const _appId = String.fromEnvironment('FIREBASE_APP_ID');
 
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) return web;

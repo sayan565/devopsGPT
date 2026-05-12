@@ -26,8 +26,14 @@ locals {
     ACTIONS_TABLE      = var.tables["actions"]
     CHAT_TABLE         = var.tables["chat"]
     CONNECTIONS_TABLE  = var.tables["ws_conns"]
+    # METRICS_TABLE used by cloudwatch_poller and data_collector
+    METRICS_TABLE      = lookup(var.tables, "metrics", "${var.prefix}-metrics")
+    # FIX_HISTORY_TABLE used by ai_analysis and fix_executor
+    FIX_HISTORY_TABLE  = lookup(var.tables, "fix-history", "${var.prefix}-fix-history")
     WEBSOCKET_ENDPOINT = var.ws_endpoint
     AWS_ACCOUNT_REGION = var.aws_region
+    # bedrock_model_id kept for future Bedrock integration (FS spec requirement)
+    BEDROCK_MODEL_ID   = var.bedrock_model_id
     LOG_LEVEL          = "INFO"
   }
 }

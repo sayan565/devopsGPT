@@ -7,12 +7,10 @@ class ApiConfig {
     'API_BASE_URL',
     defaultValue: 'https://83zbtddxvk.execute-api.us-east-1.amazonaws.com/dev',
   );
-  // SECURITY: Never hardcode API keys. Inject via --dart-define=API_KEY=...
-  // at build time, or load from a secure secrets manager at runtime.
-  static const apiKey = String.fromEnvironment(
-    'API_KEY',
-    defaultValue: '', // empty default — must be supplied at build time
-  );
+  // AWS API Gateway key — must be supplied via --dart-define=API_KEY=xxx
+  // No default — app will get 403 without this value.
+  // For local dev: flutter run --dart-define=API_KEY=your_key_here
+  static const apiKey = String.fromEnvironment('API_KEY');
 
   // Retry configuration
   static const int maxRetries      = 3;

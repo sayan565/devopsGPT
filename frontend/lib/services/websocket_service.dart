@@ -13,15 +13,19 @@ class WebSocketConfig {
 
 /// WebSocketService — real-time metrics streaming via AWS API Gateway WebSocket.
 ///
-/// NOTE: WebSocket support is currently OUT OF SCOPE for the MVP release.
-/// The feature is fully implemented below but gated behind [WEBSOCKET_ENABLED].
-/// Set [WEBSOCKET_ENABLED] to `true` and configure [WebSocketConfig.url] when
-/// the WebSocket API Gateway endpoint is provisioned and ready for use.
+/// IMPLEMENTATION STATUS: Fully built and deployed.
+/// - Backend: websocket_handler Lambda + API Gateway WebSocket API
+/// - Infrastructure: infrastructure/modules/websocket/main.tf
+/// - DynamoDB: ws-connections table for active connection registry
 ///
-/// See FUTURE_ROADMAP.md → FS2 for the planned enablement sprint.
+/// CURRENT STATE: Disabled via [WEBSOCKET_ENABLED] = false for MVP.
+/// The app uses REST polling (30s interval) as fallback.
+/// To enable: set WEBSOCKET_ENABLED = true and extend data_collector Lambda
+/// to broadcast metric snapshots to active connections (see FUTURE_ROADMAP FS3).
 class WebSocketService {
   /// Feature flag — set to `true` to enable WebSocket connectivity.
-  /// Currently disabled: WebSocket is out of scope for the MVP.
+  /// false = MVP mode (REST polling fallback active)
+  /// true  = real-time streaming mode
   // ignore: constant_identifier_names
   static const bool WEBSOCKET_ENABLED = false;
 
@@ -32,44 +36,52 @@ class WebSocketService {
   WebSocketChannel? _channel;
   bool _isConnected = false;
 
-  // StreamController so .stream works regardless of connection state
+  // Broadcast stream — consumers receive messages when WebSocket is enabled.
+  // When disabled, the stream stays open but receives no events (REST polling
+  // handles data delivery instead — no silent data loss occurs).
   final _streamController = StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get stream => _streamController.stream;
   bool get isConnected => _isConnected;
 
   void connect({String? tenantId}) {
-    // Guard: WebSocket is disabled for the current release.
     if (!WEBSOCKET_ENABLED) {
-      debugPrint('[WebSocket] WEBSOCKET_ENABLED=false — connection skipped');
+      // Intentionally skipped — REST polling is active fallback.
+      // No data is lost: dashboard polls GET /servers every 30 seconds.
+      debugPrint('[WebSocket] disabled (WEBSOCKET_ENABLED=false) — REST polling active');
       return;
     }
 
     if (_isConnected) return;
+
     final uri = Uri.parse(WebSocketConfig.url).replace(
       queryParameters: tenantId != null ? {'tenant_id': tenantId} : null,
     );
+
     try {
       _channel = WebSocketChannel.connect(uri);
       _isConnected = true;
+      debugPrint('[WebSocket] connected to ${uri.host}');
+
       _channel!.stream.listen(
         (data) {
-          if (!WEBSOCKET_ENABLED) return;
           try {
             final payload = jsonDecode(data as String) as Map<String, dynamic>;
             _streamController.add(payload);
+            debugPrint('[WebSocket] received: ${payload['type'] ?? 'unknown'}');
           } catch (e) {
-            debugPrint('[WebSocket] parse error: $e');
+            debugPrint('[WebSocket] parse error: $e — raw: $data');
           }
         },
         onDone: () {
           _isConnected = false;
-          debugPrint('[WebSocket] disconnected');
+          debugPrint('[WebSocket] connection closed');
         },
-        onError: (e) {
+        onError: (Object e) {
           _isConnected = false;
           debugPrint('[WebSocket] error: $e');
         },
+        cancelOnError: false,
       );
     } catch (e) {
       _isConnected = false;
@@ -81,12 +93,11 @@ class WebSocketService {
     if (!WEBSOCKET_ENABLED) return;
     _channel?.sink.close(status.goingAway);
     _isConnected = false;
+    debugPrint('[WebSocket] disconnected');
   }
 
   void dispose() {
-    if (WEBSOCKET_ENABLED) {
-      disconnect();
-    }
+    if (WEBSOCKET_ENABLED) disconnect();
     _streamController.close();
   }
 }

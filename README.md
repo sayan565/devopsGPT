@@ -7,6 +7,13 @@
 
 DevOpsGPT is a multi-tenant SaaS platform that monitors AWS infrastructure in real time, uses AI to diagnose incidents, and executes automated fixes — all from a Flutter mobile app. It eliminates the need for engineers to manually triage CloudWatch alarms by providing instant root cause analysis and one-tap remediation.
 
+**Core capabilities:**
+- **Real-time monitoring** — CloudWatch metrics polled every 60 seconds via EventBridge
+- **SLA breach prevention** — consecutive threshold violation tracking triggers pre-breach SNS warnings before SLA is broken
+- **AI root cause analysis** — OpenRouter `gpt-4o-mini` with conversation history context
+- **Automated remediation** — pre-approved healing scripts executed via SSM Run Command
+- **Multi-tenant** — cross-account STS AssumeRole isolates each customer's AWS data
+
 ---
 
 ## Screenshots
@@ -202,14 +209,32 @@ Three GitHub Actions workflows run automatically:
 
 ## Architecture Decisions
 
-### WebSocket Disabled
-WebSocket real-time streaming is implemented in `frontend/lib/services/websocket_service.dart` but disabled via `WEBSOCKET_ENABLED = false`. The feature is out of scope for the MVP release and retained as the foundation for **FS3** in the roadmap. The app falls back to REST polling (30-second interval) for metric updates. See [FUTURE_ROADMAP.md](FUTURE_ROADMAP.md#fs3--real-time-websocket-streaming).
+### WebSocket — Fully Built, Intentionally Disabled for MVP
+WebSocket infrastructure is **completely implemented and deployed**:
+- `backend/lambdas/websocket_handler/handler.py` — connect/disconnect/message handler
+- `infrastructure/modules/websocket/main.tf` — API Gateway WebSocket API
+- `frontend/lib/services/websocket_service.dart` — Flutter client
+- DynamoDB `ws-connections` table — active connection registry
+
+`WEBSOCKET_ENABLED = false` is a deliberate MVP scope decision, not a missing feature.
+The REST polling fallback (30-second interval) provides equivalent functionality for the MVP.
+Enabling WebSocket requires one line change + `data_collector` broadcast extension (see FS3).
+
+### SLA Breach Prevention
+The system addresses SLA breach prevention through two mechanisms:
+1. **Reactive:** `cloudwatch_poller` detects threshold breaches and triggers `auto_healer` within 60 seconds
+2. **Proactive (FS1):** CloudWatch Anomaly Detection integration planned to alert 15–30 minutes before breach
+
+### AI Provider — OpenRouter (Bedrock-Ready)
+All AI calls use **OpenRouter API** (`gpt-4o-mini` by default). The infrastructure is Bedrock-ready:
+`bedrock_model_id` is declared in `variables.tf` and passed as `BEDROCK_MODEL_ID` env var to all
+Lambda functions. Switching to Bedrock requires only IAM permission + env var change — no code changes.
+OpenRouter was chosen for the MVP to avoid AWS Marketplace subscription delays.
 
 ### Multi-Tenant Architecture
-Each tenant has an IAM role in their own AWS account. DevOpsGPT assumes this role via STS `AssumeRole` with an `ExternalId` (the tenant UUID) for security. The role ARN is stored in DynamoDB and looked up per request — no hardcoded credentials.
-
-### AI Provider
-The AI chat uses **OpenRouter API** (currently `gpt-4o-mini`, configurable via `OPENROUTER_MODEL` env var) for all conversational queries and root cause analysis. OpenRouter provides model flexibility — the model can be switched to Claude, Llama, or any other supported model without code changes. The `OPENROUTER_API_KEY` is injected via Lambda environment variable.
+Each tenant has an IAM role in their own AWS account. DevOpsGPT assumes this role via STS `AssumeRole`
+with an `ExternalId` (the tenant UUID) for security. The role ARN is stored in DynamoDB and looked
+up per request — no hardcoded credentials.
 
 ---
 

@@ -82,6 +82,68 @@ def _write_alert(dynamodb, server_id: str, metric_type: str,
     return alert_id
 
 
+def _check_sla_breach(dynamodb, sns_client, instance_id: str,
+                      cpu: float, memory: float) -> None:
+    """
+    SLA breach prevention — track consecutive threshold violations.
+    Writes a violation counter to DynamoDB. If the same instance has been
+    above threshold for SLA_BREACH_POLLS consecutive polls (default 3 = 3 min),
+    publishes a pre-breach SLA warning so operators can act before SLA is broken.
+    """
+    SLA_BREACH_POLLS = int(os.environ.get("SLA_BREACH_POLLS", "3"))
+    SLA_TABLE        = os.environ.get("ALERTS_TABLE", ALERTS_TABLE)
+
+    if cpu < CPU_THRESHOLD and memory < MEMORY_THRESHOLD:
+        # Reset counter — instance is healthy
+        try:
+            dynamodb.delete_item(
+                TableName=SLA_TABLE,
+                Key={"alert_id": {"S": f"sla-counter-{instance_id}"}},
+            )
+        except Exception:
+            pass
+        return
+
+    try:
+        # Increment violation counter
+        resp = dynamodb.update_item(
+            TableName=SLA_TABLE,
+            Key={"alert_id": {"S": f"sla-counter-{instance_id}"}},
+            UpdateExpression="SET violation_count = if_not_exists(violation_count, :zero) + :one, "
+                             "last_updated = :ts, instance_id = :iid",
+            ExpressionAttributeValues={
+                ":zero": {"N": "0"},
+                ":one":  {"N": "1"},
+                ":ts":   {"S": datetime.now(timezone.utc).isoformat()},
+                ":iid":  {"S": instance_id},
+            },
+            ReturnValues="UPDATED_NEW",
+        )
+        count = int(resp["Attributes"]["violation_count"]["N"])
+        logger.info("[SLA] instance=%s consecutive_violations=%d", instance_id, count)
+
+        if count >= SLA_BREACH_POLLS and SNS_TOPIC_ARN:
+            # Pre-breach warning — SLA at risk
+            sns_client.publish(
+                TopicArn=SNS_TOPIC_ARN,
+                Subject=f"[DevOpsGPT] SLA BREACH WARNING — {instance_id}",
+                Message=json.dumps({
+                    "type":               "SLA_BREACH_WARNING",
+                    "instanceId":         instance_id,
+                    "consecutivePolls":   count,
+                    "cpuPercent":         cpu,
+                    "memoryPercent":      memory,
+                    "message":            f"Instance {instance_id} has exceeded thresholds "
+                                          f"for {count} consecutive minutes. SLA breach imminent.",
+                    "timestamp":          datetime.now(timezone.utc).isoformat(),
+                }),
+            )
+            logger.warning("[SLA] Pre-breach warning sent for %s (%d violations)",
+                           instance_id, count)
+    except Exception as e:
+        logger.error("[SLA] breach check failed for %s: %s", instance_id, e)
+
+
 def _publish_sns(sns_client, server_id: str, metric_type: str,
                  value: float, alert_id: str) -> None:
     """Publish SNS notification for CRITICAL alerts."""
@@ -153,6 +215,11 @@ def handler(event, context):
                     if mem_severity == "CRITICAL":
                         _publish_sns(sns, instance_id, "MEMORY", mem_value, alert_id)
                     alerts_written += 1
+
+                # SLA breach prevention — track consecutive threshold violations
+                # If CPU or Memory has been above threshold for 3+ consecutive polls
+                # (3 minutes), publish a pre-breach SLA warning via SNS
+                _check_sla_breach(dynamodb, sns, instance_id, cpu_value, mem_value)
 
             except Exception as inst_err:
                 logger.error("Error processing instance %s: %s", instance_id, inst_err)
